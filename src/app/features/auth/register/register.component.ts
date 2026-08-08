@@ -1,17 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import {
-  AppAccessService,
-  AuthService,
-  MenuService,
-  ToastService,
-  applyServerErrors,
-  clearServerError,
-  fieldError,
-  revealErrors,
-} from '@tarun1515/jp-shared';
-import { APPLICATION_STAGES, UiAuthShellComponent, UiPasswordFieldComponent, UiRollComponent } from '@tarun1515/jp-shared';
+import { AppAccessService, AuthService, MenuService, ToastService } from 'jp-shared/core';
+import { applyServerErrors, clearServerError, fieldError, revealErrors } from 'jp-shared/models';
+import { APPLICATION_STAGES, UiAuthShellComponent, UiPasswordFieldComponent, UiRollComponent } from 'jp-shared/ui';
 
 /**
  * Create a teacher account.

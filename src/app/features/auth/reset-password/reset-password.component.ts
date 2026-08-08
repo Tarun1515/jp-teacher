@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { AuthService, ToastService, UiAuthShellComponent, UiPasswordFieldComponent, fieldError, revealErrors } from '@tarun1515/jp-shared';
+import { UiAuthShellComponent, UiPasswordFieldComponent } from 'jp-shared/ui';
+import { AuthService, ToastService } from 'jp-shared/core';
+import { fieldError, revealErrors } from 'jp-shared/models';
 
 /**
  * Finish a password reset, or set a first password from an invitation.

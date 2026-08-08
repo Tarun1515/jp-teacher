@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { UiAppShellComponent } from '@tarun1515/jp-shared';
+import { UiAppShellComponent } from 'jp-shared/ui';
 
 /**
  * Teacher chrome.

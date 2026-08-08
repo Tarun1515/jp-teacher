@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { activeAccountGuard, authGuard, guestGuard } from '@tarun1515/jp-shared';
+import { activeAccountGuard, authGuard, guestGuard } from 'jp-shared/core';
 
 import { TeacherLayoutComponent } from './layouts/teacher-layout.component';
 
@@ -105,15 +105,15 @@ export const routes: Routes = [
   // ---- errors --------------------------------------------------------------
   {
     path: 'forbidden',
-    loadComponent: () => import('@tarun1515/jp-shared').then((m) => m.ForbiddenComponent),
+    loadComponent: () => import('jp-shared/pages').then((m) => m.ForbiddenComponent),
   },
   {
     path: '**',
-    loadComponent: () => import('@tarun1515/jp-shared').then((m) => m.NotFoundComponent),
+    loadComponent: () => import('jp-shared/pages').then((m) => m.NotFoundComponent),
   },
 ];
 
 /** Shared placeholder loader, until each feature lands. */
 function comingSoon() {
-  return import('@tarun1515/jp-shared').then((m) => m.ComingSoonComponent);
+  return import('jp-shared/pages').then((m) => m.ComingSoonComponent);
 }

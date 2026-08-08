@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { AuthService, ToastService, UiAuthShellComponent, clearServerError, fieldError, revealErrors } from '@tarun1515/jp-shared';
+import { UiAuthShellComponent } from 'jp-shared/ui';
+import { AuthService, ToastService } from 'jp-shared/core';
+import { clearServerError, fieldError, revealErrors } from 'jp-shared/models';
 
 /**
  * Start a password reset.

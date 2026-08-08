@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { AuthService, OTP_CHANNEL, ToastService, UiAuthShellComponent, UiOtpInputComponent } from '@tarun1515/jp-shared';
+import { UiAuthShellComponent, UiOtpInputComponent } from 'jp-shared/ui';
+import { AuthService, ToastService } from 'jp-shared/core';
+import { OTP_CHANNEL } from 'jp-shared/models';
 
 const RESEND_SECONDS = 45;
 

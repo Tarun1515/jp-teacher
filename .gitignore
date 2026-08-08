@@ -6,9 +6,6 @@ out-tsc/
 tmp/
 
 # ---------- secrets ----------
-# .npmrc holds a GitHub Packages token. .npmrc.example is committed instead,
-# and it reads the token from an environment variable.
-.npmrc
 .env
 .env.*
 

@@ -31,6 +31,39 @@
       "prefix": "app",
       "architect": {
         "build": {
+          "builder": "@angular-architects/native-federation:build",
+          "options": {
+            "target": "jp-teacher:esbuild"
+          },
+          "configurations": {
+            "production": {
+              "target": "jp-teacher:esbuild:production"
+            },
+            "development": {
+              "target": "jp-teacher:esbuild:development"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular-architects/native-federation:build",
+          "options": {
+            "target": "jp-teacher:serve-original",
+            "rebuildDelay": 0,
+            "dev": true,
+            "port": 4400
+          },
+          "configurations": {
+            "production": {
+              "target": "jp-teacher:serve-original:production"
+            },
+            "development": {
+              "target": "jp-teacher:serve-original:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "esbuild": {
           "builder": "@angular/build:application",
           "options": {
             "outputPath": "dist",
@@ -49,10 +82,12 @@
             ],
             "stylePreprocessorOptions": {
               "includePaths": [
-                "node_modules/@tarun1515/jp-shared/styles"
+                "../jp-shared/src/styles"
               ]
             },
-            "preserveSymlinks": true
+            "polyfills": [
+              "es-module-shims"
+            ]
           },
           "configurations": {
             "production": {
@@ -84,7 +119,7 @@
           },
           "defaultConfiguration": "production"
         },
-        "serve": {
+        "serve-original": {
           "builder": "@angular/build:dev-server",
           "options": {
             "port": 4400,
@@ -92,10 +127,10 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "jp-teacher:build:production"
+              "buildTarget": "jp-teacher:esbuild:production"
             },
             "development": {
-              "buildTarget": "jp-teacher:build:development"
+              "buildTarget": "jp-teacher:esbuild:development"
             }
           },
           "defaultConfiguration": "development"

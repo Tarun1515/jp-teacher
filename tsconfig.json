@@ -4,6 +4,13 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    /* Types only. At runtime these four specifiers are left external by the
+       build (federation.config.mjs) and resolved by the import map to bundles
+       served by jp-shared on :4999 — nothing here is compiled into this app.
+       The repos sit as siblings on disk, which is what makes ../ work. */
+    "paths": {
+      "jp-shared/*": ["../jp-shared/src/entries/*"]
+    },
     "strict": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,

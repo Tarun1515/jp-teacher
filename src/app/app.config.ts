@@ -1,15 +1,8 @@
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
-import {
-  JP_API_CONFIG,
-  JP_APP_IDENTITY,
-  JpAppIdentity,
-  UserType,
-  authInterceptor,
-  errorInterceptor,
-  loaderInterceptor,
-} from '@tarun1515/jp-shared';
+import { JP_API_CONFIG, JP_APP_IDENTITY, JpAppIdentity, authInterceptor, errorInterceptor, loaderInterceptor } from 'jp-shared/core';
+import { UserType } from 'jp-shared/models';
 
 import { environment } from '../environments/environment';
 import { routes } from './app.routes';

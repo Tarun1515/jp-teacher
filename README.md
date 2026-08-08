@@ -18,76 +18,78 @@ runs on **http://localhost:4400**.
 | .NET SDK | 8.0.x — for `jp-backend` |
 | SQL Server | 2019, instance `localhost\TARUN`, Windows auth |
 
-All seven repositories are cloned as **siblings**:
-
-```
-D:Projects├── jp-docs      ← read this first
-├── jp-shared    the shared library
-├── jp-admin     :4200
-├── jp-school    :4300
-├── jp-teacher   :4400
-├── jp-public    :4500
-└── jp-backend   both APIs + all database scripts
-```
-
-New machine? `cd jp-docs && npm run bootstrap` clones and installs the lot,
-then prints what still needs doing by hand.
-
----
-
 ## Setup
 
-### 1. GitHub Packages token
-
-`@tarun1515/jp-shared` is published to GitHub Packages, so installing it needs
-a token with `read:packages`.
-
-```bash
-cp .npmrc.example .npmrc          # .npmrc is gitignored
-setx GITHUB_TOKEN "ghp_..."       # PowerShell; reopen the shell afterwards
-```
-
-The token is read from the environment, so `.npmrc` itself never contains it.
-
-> If npm reports **404** for `@tarun1515/jp-shared`, this is almost always the
-> cause. GitHub Packages answers an unauthenticated request for a private
-> package with 404 rather than 401, so "not found" usually means
-> "not authorised".
-
-### 2. Install
+### 1. Install
 
 ```bash
 npm install
 ```
 
-### 3. Shared library — pick a mode
+No registry token, no `.npmrc`, no `npm link`. The shared code is not an npm
+package any more — see the next section.
 
-**Development** (default while building anything). Points at the sibling working
-copy; changes flow straight through, no version bump and no publish:
+### 2. 🔴 jp-shared must be running
 
-```bash
-npm run link:shared
-```
-
-**Release** (CI, or another machine). Takes the published version:
+This app is a Module Federation **host**. `jp-shared` is a **remote** that
+serves the design system and core services on **:4999**, and this app fetches
+them at runtime.
 
 ```bash
-npm run update:shared
+cd ../jp-shared && npm start     # :4999 — leave it running
 ```
 
-Which mode am I in?
+Start it **before** this app. Without it the app boots to a blank page, because
+`jp-shared/ui`, `jp-shared/core`, `jp-shared/models` and `jp-shared/pages` are
+import map entries pointing at :4999, not files on disk here.
 
-```bash
-cd ../jp-docs && npm run check-versions
+That is the trade being made: one process everything depends on, in exchange
+for editing a shared component and seeing it here on reload with no publish,
+no version bump and no link step.
+
+### 3. 🔴 The repos must be siblings
+
+```
+D:\Projects\
+├── jp-docs      ← read PROJECT_MEMORY.md first
+├── jp-shared    :4999   the remote — start this first
+├── jp-admin     :4200
+├── jp-school    :4300
+├── jp-teacher   :4400
+├── jp-public    :4500   standalone, not federated
+└── jp-backend   both APIs + all database scripts
 ```
 
-It prints `linked` or `installed` per app, and flags anything stale.
+Not just a convention. **JavaScript is shared at runtime** over federation, but
+**SCSS is shared at build time**, through `angular.json`:
 
-> ⚠️ This project sets **`"preserveSymlinks": true`** in `angular.json`.
-> Do not remove it. Without it a linked library resolves its own copy of
-> Angular, the app ends up with two, and every injection token fails with
-> `NG0203: The InjectionToken JP_APP_IDENTITY token injection failed`. The
-> message blames dependency injection; the cause is module resolution.
+```json
+"stylePreprocessorOptions": { "includePaths": ["../jp-shared/src/styles"] }
+```
+
+That `../` is why the checkout layout is load-bearing. Components keep writing
+`@use 'variables' as v;` exactly as before — no relative paths, no copies.
+
+> ⚠️ **CI must check out `jp-shared` beside this repo**, or the build fails at
+> the first component stylesheet. A build agent that clones only this
+> repository cannot compile it.
+
+New machine? `cd jp-docs && npm run bootstrap` clones and installs all seven,
+then prints what still needs doing by hand.
+
+### 4. Two gotchas worth knowing before you hit them
+
+**Do not run a production build while the dev server is running.** Both share
+the federation externals cache, and a production build replaces the dev copy of
+`@angular/core`. The app then dies with `ReferenceError: ngDevMode is not
+defined`, which says nothing about the cause. Fix: stop the dev server, delete
+`.angular/cache`, start again.
+
+**`@angular/animations` is a dependency and no code uses it.** Leave it. The
+hosts turn off Native Federation's `ignoreUnusedDeps`, so nothing prunes the
+unreachable parts of `@angular/platform-browser`, whose animations entry points
+import it. Removing it breaks the build with `Could not resolve
+@angular/animations/browser`.
 
 ---
 
@@ -104,8 +106,8 @@ You also need `JP.Sso.Api` on :5199 from `jp-backend`:
 cd ../jp-backend/JP.Sso.Api && dotnet run
 ```
 
-> `npm start` refuses to move to a different port if 4400 is busy. That is
-> deliberate: the API's CORS allow-list and `environment.ts` are both pinned to
+> `npm start` refuses to move to a different port if the port is busy. That is
+> deliberate: the API CORS allow-list and `environment.ts` are both pinned to
 > it, so on any other port the app loads and then every request fails. Stop
 > whatever is holding the port rather than moving off it.
 

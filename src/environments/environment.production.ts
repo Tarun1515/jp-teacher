@@ -9,6 +9,6 @@ export const environment = {
   appUrls: {
     admin: 'https://admin.staffroom.in',
     school: 'https://school.staffroom.in',
-    teacher: 'https://staffroom.in',
+    teacher: 'https://teacher.staffroom.in',
   },
 };
