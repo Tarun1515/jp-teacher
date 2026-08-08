@@ -1,0 +1,93 @@
+<ui-auth-shell
+  title="Sign in"
+  subtitle="Use the email or mobile number you registered with."
+  boardNote="For teachers"
+>
+  <!--
+    Someone who signed in successfully with another app's account. The token
+    was valid; this is simply not their app. Told plainly, with the way out.
+  -->
+  @if (wrongApp(); as notice) {
+    <div class="auth__alert auth__alert--wayfinding" role="alert">
+      <p class="auth__alert-title">{{ notice.message }}</p>
+      <a class="auth__alert-action" [href]="notice.url">{{ notice.actionLabel }}</a>
+    </div>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <!--
+      aria-live so a screen reader hears the failure without having to go
+      looking for it. Placed above the submit because that is where the user's
+      eye is when the button stops spinning.
+    -->
+    @if (formError(); as message) {
+      <p class="auth__alert" role="alert">{{ message }}</p>
+    }
+
+    <div class="field">
+      <label class="field__label" for="loginId">
+        Email or mobile
+      </label>
+
+      <input
+        class="form-control"
+        id="loginId"
+        type="text"
+        inputmode="email"
+        autocomplete="username"
+        formControlName="loginId"
+        [attr.aria-invalid]="!!loginIdError()"
+        [attr.aria-describedby]="loginIdError() ? 'loginId-error' : null"
+        aria-required="true"
+        (input)="onFieldInput('loginId')"
+      />
+
+      @if (loginIdError(); as message) {
+        <p class="field__error" id="loginId-error">{{ message }}</p>
+      }
+    </div>
+
+    <ui-password-field
+      label="Password"
+      inputId="password"
+      autocomplete="current-password"
+      formControlName="password"
+      [error]="passwordError()"
+      [hasAction]="true"
+      (input)="onFieldInput('password')"
+    >
+      <a fieldAction class="field__action" routerLink="/auth/forgot-password">
+        Forgot password?
+      </a>
+    </ui-password-field>
+
+    <button
+      type="submit"
+      class="btn btn--primary btn--block btn--lg"
+      [class.btn--loading]="submitting()"
+      [disabled]="submitting()"
+    >
+      Sign in
+    </button>
+  </form>
+
+  <div authFoot class="auth__foot">
+    New here? <a routerLink="/auth/register">Create a teacher account</a>
+  </div>
+  <div authPanel>
+      <p class="auth__panel-eyebrow">How hiring works here</p>
+
+      <p class="auth__panel-lede">
+        Know exactly where your application stands, every day.
+      </p>
+
+      <div class="auth__panel-roll">
+        <ui-roll [stages]="pipeline" [current]="4" size="lg" tone="on-dark" [showCount]="false" />
+      </div>
+
+      <p class="auth__panel-note">
+        No guessing and no chasing. Every school here is verified before its
+        jobs go live, so the listings are real ones.
+      </p>
+  </div>
+</ui-auth-shell>

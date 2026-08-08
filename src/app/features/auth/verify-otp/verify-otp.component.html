@@ -1,0 +1,47 @@
+<ui-auth-shell
+  title="Enter the code"
+  subtitle="We sent a 6-digit code to your email. It expires in 10 minutes."
+  step="Step 2 of 3"
+>
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (formError(); as message) {
+      <p class="auth__alert" role="alert">{{ message }}</p>
+    }
+
+    <div class="field">
+      <ui-otp-input
+        formControlName="code"
+        ariaLabel="Verification code"
+        [invalid]="!!formError()"
+        (completed)="onCompleted()"
+      />
+    </div>
+
+    <button
+      type="submit"
+      class="btn btn--primary btn--block btn--lg"
+      [class.btn--loading]="submitting()"
+      [disabled]="submitting() || form.invalid"
+    >
+      Verify
+    </button>
+
+    <!--
+      A countdown rather than a disabled button. "Send again in 0:42" says the
+      button is coming back; a greyed-out control says nothing and people
+      reload the page to find out.
+    -->
+    <p class="otp__resend" aria-live="polite">
+      @if (canResend()) {
+        Didn't get it?
+        <button type="button" class="btn btn--link btn--sm" (click)="resend()">Send again</button>
+      } @else {
+        <span class="text-muted">Send again in <span class="text-mono">{{ countdown() }}</span></span>
+      }
+    </p>
+  </form>
+
+  <div authFoot class="auth__foot">
+    Wrong address? <a routerLink="/auth/login">Sign in with another account</a>
+  </div>
+</ui-auth-shell>

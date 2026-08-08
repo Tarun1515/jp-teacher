@@ -1,0 +1,132 @@
+<ui-auth-shell
+  title="Create your teacher account"
+  subtitle="Find jobs at verified schools near you. It takes about a minute."
+  boardNote="For teachers"
+>
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    @if (formError(); as message) {
+      <p class="auth__alert" role="alert">{{ message }}</p>
+    }
+
+    <div class="field">
+      <label class="field__label" for="name">Your full name</label>
+
+      <input
+        class="form-control"
+        id="name"
+        type="text"
+        autocomplete="name"
+        formControlName="name"
+        [attr.aria-invalid]="!!nameError()"
+        [attr.aria-describedby]="nameError() ? 'name-error' : 'name-helper'"
+        aria-required="true"
+        (input)="onFieldInput('name')"
+      />
+
+      @if (nameError(); as message) {
+        <p class="field__error" id="name-error">{{ message }}</p>
+      } @else {
+        <p class="field__helper" id="name-helper">As it appears on your qualification certificates.</p>
+      }
+    </div>
+
+    <div class="grid grid--2">
+      <div class="field">
+        <label class="field__label" for="email">Email</label>
+
+        <input
+          class="form-control"
+          id="email"
+          type="email"
+          inputmode="email"
+          autocomplete="email"
+          formControlName="email"
+          [attr.aria-invalid]="!!emailError()"
+          [attr.aria-describedby]="emailError() ? 'email-error' : null"
+          aria-required="true"
+          (input)="onFieldInput('email')"
+        />
+
+        @if (emailError(); as message) {
+          <p class="field__error" id="email-error">{{ message }}</p>
+        }
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="mobile">
+          Mobile
+          <span class="field__optional">Optional</span>
+        </label>
+
+        <input
+          class="form-control"
+          id="mobile"
+          type="tel"
+          inputmode="numeric"
+          autocomplete="tel-national"
+          maxlength="10"
+          formControlName="mobile"
+          [attr.aria-invalid]="!!mobileError()"
+          [attr.aria-describedby]="mobileError() ? 'mobile-error' : 'mobile-helper'"
+          (input)="onFieldInput('mobile')"
+        />
+
+        @if (mobileError(); as message) {
+          <p class="field__error" id="mobile-error">{{ message }}</p>
+        } @else {
+          <p class="field__helper" id="mobile-helper">Where we send job alerts that match your subject.</p>
+        }
+      </div>
+    </div>
+
+    <ui-password-field
+      label="Password"
+      inputId="new-password"
+      autocomplete="new-password"
+      helper="At least 8 characters."
+      formControlName="password"
+      [error]="passwordError()"
+      [showStrength]="true"
+      (input)="onFieldInput('password')"
+    />
+
+    <!--
+      Says where this lands BEFORE the button is pressed. Discovering it
+      afterwards is the kind of surprise that costs trust at the exact moment
+      it is being built.
+    -->
+    <p class="auth__note">
+      You can start applying straight away.
+    </p>
+
+    <button
+      type="submit"
+      class="btn btn--primary btn--block btn--lg"
+      [class.btn--loading]="submitting()"
+      [disabled]="submitting()"
+    >
+      Create account
+    </button>
+  </form>
+
+  <div authFoot class="auth__foot">
+    Already have an account? <a routerLink="/auth/login">Sign in</a>
+  </div>
+
+  <div authPanel>
+      <p class="auth__panel-eyebrow">How hiring works here</p>
+
+      <p class="auth__panel-lede">
+        Know exactly where your application stands, every day.
+      </p>
+
+      <div class="auth__panel-roll">
+        <ui-roll [stages]="pipeline" [current]="4" size="lg" tone="on-dark" [showCount]="false" />
+      </div>
+
+      <p class="auth__panel-note">
+        Apply once and follow it the whole way — no guessing, no chasing, and
+        no schools that turn out not to exist.
+      </p>
+  </div>
+</ui-auth-shell>

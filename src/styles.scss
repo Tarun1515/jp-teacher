@@ -1,0 +1,14 @@
+// =============================================================================
+// GLOBAL STYLESHEET
+//
+// One line, and it is the same line in every app. The design system lives in
+// @jp/shared and is resolved through stylePreprocessorOptions in angular.json,
+// so no app knows where the package physically sits.
+//
+// Component-specific rules belong in that component's .scss file, which should
+// `@use 'variables' as v;` and `@use 'mixins' as m;` — never a raw hex colour,
+// never a raw px value that belongs to a scale, never a hand-written media
+// query.
+// =============================================================================
+
+@use 'theme';

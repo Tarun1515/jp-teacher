@@ -1,0 +1,26 @@
+# ---------- dependencies and build output ----------
+node_modules/
+dist/
+.angular/
+out-tsc/
+tmp/
+
+# ---------- secrets ----------
+# .npmrc holds a GitHub Packages token. .npmrc.example is committed instead,
+# and it reads the token from an environment variable.
+.npmrc
+.env
+.env.*
+
+# ---------- editor / OS ----------
+.vscode/*
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---------- logs ----------
+npm-debug.log*
+yarn-error.log*
