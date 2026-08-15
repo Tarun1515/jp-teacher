@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { activeAccountGuard, authGuard, guestGuard } from 'jp-shared/core';
+import { activeAccountGuard, authGuard, guestGuard, unsavedChangesGuard } from 'jp-shared/core';
 
 import { TeacherLayoutComponent } from './layouts/teacher-layout.component';
 
@@ -92,7 +92,20 @@ export const routes: Routes = [
     component: TeacherLayoutComponent,
     children: [
       { path: 'dashboard', loadComponent: comingSoon, data: { title: 'Dashboard' } },
-      { path: 'profile', loadComponent: comingSoon, data: { title: 'My profile' } },
+      {
+        path: 'profile',
+        loadComponent: () =>
+          import('./features/teacher/profile/teacher-profile.component').then(
+            (m) => m.TeacherProfileComponent,
+          ),
+        /*
+          Nine sections, all of them holding typed text. canDeactivate asks the
+          component what is dirty and names those sections in the warning — see
+          unsavedChangesGuard for why it uses the native dialog.
+        */
+        canDeactivate: [unsavedChangesGuard],
+        data: { title: 'My profile' },
+      },
       { path: 'jobs', loadComponent: comingSoon, data: { title: 'Find jobs' } },
       { path: 'applications', loadComponent: comingSoon, data: { title: 'My applications' } },
       { path: 'saved-jobs', loadComponent: comingSoon, data: { title: 'Saved jobs' } },

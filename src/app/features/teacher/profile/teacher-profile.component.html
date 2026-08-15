@@ -1,0 +1,782 @@
+<div class="page enter">
+  <header class="page__header">
+    <div class="page__heading">
+      <h1 class="page__title">My profile</h1>
+      <p class="page__description">
+        This is what a school sees when they find you. You can fill it in a bit
+        at a time — every section saves on its own.
+      </p>
+    </div>
+
+    @if (profile(); as teacher) {
+      <div class="page__actions">
+        @if (teacher.isVerified) {
+          <ui-badge tone="success">Verified</ui-badge>
+        }
+      </div>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="skeletons">
+      @for (row of skeletonRows; track row) {
+        <div class="card">
+          <div class="card__body">
+            <span class="skeleton" style="width: 35%; height: 1rem"></span>
+            <span class="skeleton" style="width: 100%; margin-top: 1rem"></span>
+            <span class="skeleton" style="width: 70%; margin-top: 0.5rem"></span>
+          </div>
+        </div>
+      }
+    </div>
+  } @else if (loadFailed()) {
+    <div class="card">
+      <div class="card__body text-center">
+        <p class="text-section-title">We could not load your profile</p>
+        <p class="text-helper">Nothing has been lost — this is usually a connection that dropped.</p>
+        <ui-button variant="primary" (click)="load()">Try again</ui-button>
+      </div>
+    </div>
+  } @else if (profile(); as teacher) {
+    <!--====================================================================
+      THE METER — progress and a next step, never a verdict
+
+      🔴 A teacher at 0% is never shown "0%". Being told you have achieved
+      nothing before you have started is exactly where people close the tab.
+      What they get is one thing to do and the reason it is worth doing.
+    =====================================================================-->
+    <section class="meter" style="--jp-enter-index: 1">
+      <div class="meter__head">
+        <h2 class="meter__title">{{ headline() }}</h2>
+
+        @if (percent() > 0) {
+          <span class="meter__percent">{{ percent() }}%</span>
+        }
+      </div>
+
+      <div
+        class="meter__track"
+        role="progressbar"
+        [attr.aria-valuenow]="percent()"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        [attr.aria-label]="'Profile completion: ' + percent() + ' per cent'"
+      >
+        <span class="meter__fill" [style.width.%]="percent()"></span>
+
+        <!--
+          ⚠️ The cap is drawn ON the bar, where it bites. A bar that stops
+          moving with no explanation reads as broken — and this one genuinely
+          does stop at 75 until there is a resume (2.54).
+        -->
+        @if (!teacher.resumePath) {
+          <span class="meter__cap" [style.left.%]="resumeCap" aria-hidden="true"></span>
+        }
+      </div>
+
+      @if (next(); as step) {
+        <div class="meter__next">
+          <p class="meter__next-title">
+            {{ step.title }}
+            <span class="meter__points">+{{ step.points }}%</span>
+          </p>
+          <p class="meter__next-why">{{ step.why }}</p>
+
+          <ui-button size="sm" variant="primary" (click)="scrollTo(step.section)">
+            Take me there
+          </ui-button>
+        </div>
+
+        @if (heldByResumeCap()) {
+          <p class="meter__cap-note">
+            Your profile is held at {{ resumeCap }}% until you add a resume — it is
+            the one thing left that moves the bar.
+          </p>
+        }
+      } @else {
+        <p class="meter__done">
+          Everything is filled in. Schools searching for what you teach will find
+          you with the full picture.
+        </p>
+      }
+    </section>
+
+    <!--====================================================================
+      1. ABOUT YOU
+    =====================================================================-->
+    <section class="card" id="section-basics" style="--jp-enter-index: 2">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">About you</h2>
+          <p class="card__subtitle">
+            Your name and the few lines schools read first.
+          </p>
+        </div>
+        @if (stateOf('basics') === 'saved') { <span class="save-note">Saved</span> }
+      </div>
+
+      <div class="card__body">
+        <div class="form-grid">
+          <div class="field">
+            <label class="field__label" for="fullName">Your name</label>
+            <input class="form-control" id="fullName" type="text"
+                   [ngModel]="value('fullName')"
+                   (ngModelChange)="set('fullName', $event, 'basics')" />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="dob">
+              Date of birth <span class="field__optional">Optional</span>
+            </label>
+            <input class="form-control" id="dob" type="date"
+                   [ngModel]="value('dob')"
+                   (ngModelChange)="set('dob', $event, 'basics')" />
+            <!--
+              🔴 Said plainly, because it is the field people hesitate over. A
+              school never sees this: /browse has no date of birth at all — not
+              null, absent — so age cannot become a filter (2.57).
+            -->
+            <span class="field__helper">Schools never see this. It is only used to confirm who you are.</span>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="genderId">
+              Gender <span class="field__optional">Optional</span>
+            </label>
+            <select class="form-control" id="genderId"
+                    [ngModel]="value('genderId')"
+                    (ngModelChange)="set('genderId', $event, 'basics')">
+              <option [ngValue]="null">Prefer not to say</option>
+              @for (item of genders(); track item.id) {
+                <option [ngValue]="item.id">{{ item.name }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="aboutMe">A few lines about you</label>
+          <textarea class="form-control" id="aboutMe" rows="5"
+                    placeholder="What you teach well, how you like to run a classroom, and what you are looking for next."
+                    [ngModel]="value('aboutMe')"
+                    (ngModelChange)="set('aboutMe', $event, 'basics')"></textarea>
+          <span class="field__helper">
+            A principal reads this before deciding whether to call. Four or five
+            honest sentences do more than a page.
+          </span>
+        </div>
+      </div>
+
+      <div class="card__footer">
+        @if (stateOf('basics') === 'conflict') {
+          <p class="conflict">
+            <strong>This profile was changed somewhere else while you had it open.</strong>
+            Your edit has not been saved.
+            <button type="button" class="btn btn--sm" (click)="reloadAfterConflict()">Reload</button>
+          </p>
+        }
+
+        <ui-button variant="primary" [disabled]="!isDirty('basics')"
+                   [loading]="stateOf('basics') === 'saving'"
+                   (click)="saveSection('basics')">Save</ui-button>
+      </div>
+    </section>
+
+    <!--====================================================================
+      2. PHOTO
+    =====================================================================-->
+    <section class="card" id="section-photo" style="--jp-enter-index: 3">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Your photo</h2>
+          <p class="card__subtitle">
+            Profiles with a photo get opened far more often. An ordinary one
+            taken today is completely fine.
+          </p>
+        </div>
+      </div>
+
+      <div class="card__body photo">
+        <div class="photo__frame">
+          @if (photoUrl(); as url) {
+            <img [src]="url" alt="Your profile photo" />
+          } @else {
+            <span class="photo__empty">No photo yet</span>
+          }
+        </div>
+
+        <div class="photo__actions">
+          <label class="btn btn--sm" for="photo-input">
+            {{ uploadingPhoto() ? 'Uploading…' : (teacher.photoPath ? 'Replace photo' : 'Add a photo') }}
+          </label>
+          <input class="visually-hidden" id="photo-input" type="file"
+                 accept=".jpg,.jpeg,.png" (change)="onPhotoChosen($event)" />
+          <span class="field__helper">JPG or PNG, up to 5 MB.</span>
+        </div>
+      </div>
+    </section>
+
+    <!--====================================================================
+      3. QUALIFICATIONS
+    =====================================================================-->
+    <section class="card" id="section-qualifications" style="--jp-enter-index: 4">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Qualifications</h2>
+          <p class="card__subtitle">
+            Schools filter on these two more than anything else on the page.
+          </p>
+        </div>
+        @if (stateOf('qualifications') === 'saved') { <span class="save-note">Saved</span> }
+      </div>
+
+      <div class="card__body">
+        <div class="form-grid">
+          <div class="field">
+            <label class="field__label" for="qualificationId">Highest qualification</label>
+            <select class="form-control" id="qualificationId"
+                    [ngModel]="value('qualificationId')"
+                    (ngModelChange)="set('qualificationId', $event, 'qualifications')">
+              <option [ngValue]="null">Choose…</option>
+              @for (item of qualificationOptions(); track item.id) {
+                <option [ngValue]="item.id">{{ item.name }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="designationId">What you are hired as</label>
+            <select class="form-control" id="designationId"
+                    [ngModel]="value('designationId')"
+                    (ngModelChange)="set('designationId', $event, 'qualifications')">
+              <option [ngValue]="null">Choose…</option>
+              @for (item of designationOptions(); track item.id) {
+                <option [ngValue]="item.id">{{ item.name }}</option>
+              }
+            </select>
+            <span class="field__helper">PGT, TGT, PRT — whatever your post is called.</span>
+          </div>
+
+          <div class="field form-grid__full">
+            <label class="field__label" for="highestQualificationText">
+              In your own words <span class="field__optional">Optional</span>
+            </label>
+            <input class="form-control" id="highestQualificationText" type="text"
+                   placeholder="M.Sc Physics, B.Ed — Pune University, 2016"
+                   [ngModel]="value('highestQualificationText')"
+                   (ngModelChange)="set('highestQualificationText', $event, 'qualifications')" />
+            <span class="field__helper">
+              The dropdown is what schools filter on; this is what they read.
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card__footer">
+        @if (stateOf('qualifications') === 'conflict') {
+          <p class="conflict">
+            <strong>This profile was changed somewhere else.</strong>
+            <button type="button" class="btn btn--sm" (click)="reloadAfterConflict()">Reload</button>
+          </p>
+        }
+
+        <ui-button variant="primary" [disabled]="!isDirty('qualifications')"
+                   [loading]="stateOf('qualifications') === 'saving'"
+                   (click)="saveSection('qualifications')">Save</ui-button>
+      </div>
+    </section>
+
+    <!--====================================================================
+      4. SUBJECTS AND CLASSES
+    =====================================================================-->
+    <section class="card" id="section-subjects" style="--jp-enter-index: 5">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Subjects and classes</h2>
+          <p class="card__subtitle">
+            Schools search by subject. This is the single thing that decides
+            whether they can find you at all.
+          </p>
+        </div>
+        @if (stateOf('subjects') === 'saved') { <span class="save-note">Saved</span> }
+      </div>
+
+      <div class="card__body">
+        <ui-multi-select
+          label="Subjects you teach"
+          itemNoun="subject"
+          placeholder="Choose your subjects"
+          [options]="subjectOptions()"
+          [ngModel]="selectedSubjects()"
+          (ngModelChange)="onSubjectsChange($event)"
+          helper="Pick every subject you would take a class in — not only your main one."
+        />
+
+        <ui-multi-select
+          label="Classes you can teach"
+          itemNoun="class level"
+          placeholder="Choose the levels"
+          [options]="classLevelOptions()"
+          [ngModel]="selectedClassLevels()"
+          (ngModelChange)="onClassLevelsChange($event)"
+          helper="A primary post and a senior-secondary post are different jobs. This keeps you out of the wrong shortlists."
+        />
+      </div>
+
+      <div class="card__footer">
+        <ui-button variant="primary" [disabled]="!isDirty('subjects')"
+                   [loading]="stateOf('subjects') === 'saving'"
+                   (click)="saveSubjects()">Save</ui-button>
+      </div>
+    </section>
+
+    <!--====================================================================
+      5. SKILLS AND LANGUAGES
+    =====================================================================-->
+    <section class="card" id="section-skills" style="--jp-enter-index: 6">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Skills and languages</h2>
+          <p class="card__subtitle">
+            The parts of the job that are not a subject — and what you can teach
+            in.
+          </p>
+        </div>
+        @if (stateOf('skills') === 'saved') { <span class="save-note">Saved</span> }
+      </div>
+
+      <div class="card__body">
+        <ui-multi-select
+          label="Skills"
+          itemNoun="skill"
+          placeholder="Choose your skills"
+          [options]="skillOptions()"
+          [ngModel]="selectedSkills()"
+          (ngModelChange)="onSkillsChange($event)"
+          helper="Sports coaching, lab work, counselling, exam preparation — the things schools ask about after the subject."
+        />
+
+        <!--
+          ⚠️ LANGUAGES ARE NOT A PLAIN MULTI-SELECT.
+
+          Each one carries a proficiency level (2.54), so the control chooses
+          WHICH languages and a row underneath sets HOW WELL for each. Forcing a
+          per-item value into the shared multi-select would have made that
+          control worse for the four other places it is used here.
+        -->
+        <div class="languages">
+          <ui-multi-select
+            label="Languages you can teach in"
+            itemNoun="language"
+            placeholder="Choose the languages"
+            [options]="languageOptions()"
+            [ngModel]="selectedLanguages()"
+            (ngModelChange)="onLanguagesChange($event)"
+          />
+
+          @if (selectedLanguages().length > 0) {
+            <ul class="languages__levels">
+              @for (languageId of selectedLanguages(); track languageId) {
+                <li class="languages__row">
+                  <span class="languages__name">{{ languageName(languageId) }}</span>
+
+                  <select
+                    class="form-control form-control--sm languages__level"
+                    [attr.aria-label]="'How well you speak ' + languageName(languageId)"
+                    [ngModel]="proficiencyOf(languageId)"
+                    (ngModelChange)="setProficiency(languageId, $event)"
+                  >
+                    <option [ngValue]="null">How well?</option>
+                    @for (level of proficiencies; track level.value) {
+                      <option [ngValue]="level.value">{{ level.label }}</option>
+                    }
+                  </select>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      </div>
+
+      <div class="card__footer">
+        <ui-button variant="primary" [disabled]="!isDirty('skills')"
+                   [loading]="stateOf('skills') === 'saving'"
+                   (click)="saveSkillsAndLanguages()">Save</ui-button>
+      </div>
+    </section>
+
+    <!--====================================================================
+      6. EXPERIENCE — the part that matters most
+    =====================================================================-->
+    <section class="card" id="section-experience" style="--jp-enter-index: 7">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Where you have taught</h2>
+          <p class="card__subtitle">
+            The first thing a principal reads. One school with dates is worth
+            more than a full profile without any.
+          </p>
+        </div>
+
+        @if (experienceSummary(); as summary) {
+          <!--
+            🔴 The SERVER's number. Recomputed on every change (2.54) — this
+            screen never adds up months of its own. 3B found hand-written totals
+            disagreeing with their own evidence by up to thirteen months.
+          -->
+          <span class="experience__total">{{ summary }}</span>
+        }
+      </div>
+
+      <div class="card__body">
+        @if (sortedExperiences().length === 0) {
+          <div class="card-empty">
+            <p class="text-section-title">Add where you have taught</p>
+            <p class="text-helper">
+              Schools read this first. Even one school, with the months you were
+              there, changes how your profile is read.
+            </p>
+          </div>
+        } @else {
+          <ol class="timeline">
+            @for (item of sortedExperiences(); track item.id) {
+              <li class="timeline__item" [class.timeline__item--current]="item.isCurrent">
+                <div class="timeline__body">
+                  <p class="timeline__school">
+                    {{ item.schoolName }}
+                    @if (item.isCurrent) {
+                      <span class="timeline__now">Now</span>
+                    }
+                  </p>
+
+                  <p class="timeline__meta">
+                    {{ experienceDates(item) }}
+                    @if (designationName(item.designationId); as designation) {
+                      · {{ designation }}
+                    }
+                    @if (subjectName(item.subjectId); as subject) {
+                      · {{ subject }}
+                    }
+                  </p>
+                </div>
+
+                <div class="timeline__actions">
+                  <ui-button size="sm" variant="ghost" (click)="openEditExperience(item)">Edit</ui-button>
+                  <ui-button size="sm" variant="ghost" (click)="removeExperience(item)">Remove</ui-button>
+                </div>
+              </li>
+            }
+          </ol>
+        }
+      </div>
+
+      <div class="card__footer">
+        <ui-button variant="primary" (click)="openAddExperience()">Add a school</ui-button>
+      </div>
+    </section>
+
+    <!--====================================================================
+      7. WHERE YOU WANT TO WORK
+    =====================================================================-->
+    <section class="card" id="section-locations" style="--jp-enter-index: 8">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Where you want to work</h2>
+          <p class="card__subtitle">
+            So you appear in searches near you, and not ones three states away.
+          </p>
+        </div>
+        @if (stateOf('locations') === 'saved') { <span class="save-note">Saved</span> }
+      </div>
+
+      <div class="card__body">
+        <ui-multi-select
+          label="States you would work in"
+          itemNoun="state"
+          placeholder="Choose the states"
+          [options]="stateOptions()"
+          [ngModel]="selectedStates()"
+          (ngModelChange)="onStatesChange($event)"
+          helper="The order you pick them is the order of your preference."
+        />
+
+        <!--
+          ⚠️ States only, and said plainly. The city dataset has not been
+          imported (2.47), so "anywhere in this state" is the preference the
+          system can hold — and it is a real one, not a placeholder.
+        -->
+        <p class="note">
+          We are still building the city lists for India. For now this is
+          state-wide, and you can narrow it down later.
+        </p>
+      </div>
+
+      <div class="card__footer">
+        <ui-button variant="primary" [disabled]="!isDirty('locations')"
+                   [loading]="stateOf('locations') === 'saving'"
+                   (click)="saveLocations()">Save</ui-button>
+      </div>
+    </section>
+
+    <!--====================================================================
+      8. EXPECTED SALARY
+    =====================================================================-->
+    <section class="card" id="section-salary" style="--jp-enter-index: 9">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">What you are looking for</h2>
+          <p class="card__subtitle">
+            A range is enough. Schools use it to avoid wasting your time with
+            posts that pay less.
+          </p>
+        </div>
+        @if (stateOf('salary') === 'saved') { <span class="save-note">Saved</span> }
+      </div>
+
+      <div class="card__body">
+        <div class="form-grid">
+          <div class="field">
+            <label class="field__label" for="expectedSalaryMin">From (₹ a month)</label>
+            <input class="form-control" id="expectedSalaryMin" type="number" inputmode="numeric"
+                   min="0" step="1000" placeholder="35000"
+                   [ngModel]="value('expectedSalaryMin')"
+                   (ngModelChange)="set('expectedSalaryMin', $event, 'salary')" />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="expectedSalaryMax">To (₹ a month)</label>
+            <input class="form-control" id="expectedSalaryMax" type="number" inputmode="numeric"
+                   min="0" step="1000" placeholder="50000"
+                   [ngModel]="value('expectedSalaryMax')"
+                   (ngModelChange)="set('expectedSalaryMax', $event, 'salary')" />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="currentSchool">
+              Where you teach now <span class="field__optional">Optional</span>
+            </label>
+            <input class="form-control" id="currentSchool" type="text"
+                   [ngModel]="value('currentSchool')"
+                   (ngModelChange)="set('currentSchool', $event, 'salary')" />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="currentStateId">
+              Where you live <span class="field__optional">Optional</span>
+            </label>
+            <select class="form-control" id="currentStateId"
+                    [ngModel]="value('currentStateId')"
+                    (ngModelChange)="set('currentStateId', $event, 'salary')">
+              <option [ngValue]="null">Choose…</option>
+              @for (item of states(); track item.id) {
+                <option [ngValue]="item.id">{{ item.name }}</option>
+              }
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card__footer">
+        @if (stateOf('salary') === 'conflict') {
+          <p class="conflict">
+            <strong>This profile was changed somewhere else.</strong>
+            <button type="button" class="btn btn--sm" (click)="reloadAfterConflict()">Reload</button>
+          </p>
+        }
+
+        <ui-button variant="primary" [disabled]="!isDirty('salary')"
+                   [loading]="stateOf('salary') === 'saving'"
+                   (click)="saveSection('salary')">Save</ui-button>
+      </div>
+    </section>
+
+    <!--====================================================================
+      9. RESUME AND DOCUMENTS
+    =====================================================================-->
+    <section class="card" id="section-documents" style="--jp-enter-index: 10">
+      <div class="card__header">
+        <div>
+          <h2 class="card__title">Resume and documents</h2>
+          <p class="card__subtitle">
+            Your resume is the biggest single thing on your profile.
+          </p>
+        </div>
+      </div>
+
+      <div class="card__body">
+        <!--
+          🔴 THE HIGHEST-STAKES ACTION ON THIS SCREEN. Both outcomes are
+          unmistakable, and a failed upload says the old file is untouched —
+          because the fear after one is that the file you had is gone too.
+        -->
+        <div class="resume" [class.resume--empty]="!teacher.resumePath">
+          <div class="resume__text">
+            @if (teacher.resumePath) {
+              <p class="resume__title">Your resume is on your profile</p>
+              <p class="resume__note">
+                Schools see it once you apply to them, or accept an invitation —
+                never before that.
+              </p>
+            } @else {
+              <p class="resume__title">No resume yet</p>
+              <p class="resume__note">
+                It is worth 25% on its own, and your profile stops at
+                {{ resumeCap }}% without one.
+              </p>
+            }
+          </div>
+
+        </div>
+
+        <div class="resume__buttons">
+          <label class="btn btn--primary" for="resume-input">
+            {{ uploadingResume() ? 'Uploading…' : (teacher.resumePath ? 'Replace resume' : 'Upload your resume') }}
+          </label>
+          <input class="visually-hidden" id="resume-input" type="file"
+                 accept=".pdf" (change)="onResumeChosen($event)" />
+
+          @if (teacher.resumePath) {
+            <button type="button" class="btn btn--sm" (click)="openFile(resumeHref)">
+              View what schools will see
+            </button>
+          }
+
+          <span class="field__helper">PDF, up to 5 MB.</span>
+        </div>
+
+        <!-- The verification documents. -->
+        @if (documentsFor().length > 0) {
+          <div class="documents">
+            <h3 class="documents__title">Documents</h3>
+            <p class="text-helper">
+              These are checked by us, once. A verified badge on your profile is
+              the difference between a school calling you and calling somebody
+              else.
+            </p>
+
+            <ul class="documents__list">
+              @for (type of documentsFor(); track type.id) {
+                <li class="documents__item">
+                  <div class="documents__meta">
+                    <span class="documents__name">
+                      {{ type.name }}
+                      @if (type.isMandatory) { <span class="documents__required">needed</span> }
+                    </span>
+
+                    @if (hasDocument(type.id); as uploaded) {
+                      <span class="documents__file">
+                        {{ uploaded.fileName }}
+                        @if (uploaded.isVerified) {
+                          <ui-badge tone="success" size="sm">Verified</ui-badge>
+                        } @else {
+                          <ui-badge tone="warning" size="sm">Being checked</ui-badge>
+                        }
+                      </span>
+                    } @else {
+                      <span class="documents__file documents__file--none">Not uploaded</span>
+                    }
+                  </div>
+
+                  <div class="documents__actions">
+                    @if (hasDocument(type.id); as uploaded) {
+                      <button type="button" class="btn btn--ghost btn--sm"
+                              (click)="openFile(documentHref(uploaded.documentId))">View</button>
+                      <button type="button" class="btn btn--ghost btn--sm"
+                              (click)="removeDocument(uploaded)">Remove</button>
+                    } @else {
+                      <label class="btn btn--sm" [for]="'doc-' + type.id">
+                        {{ uploadingDocument() === type.id ? 'Uploading…' : 'Upload' }}
+                      </label>
+                      <input class="visually-hidden" [id]="'doc-' + type.id" type="file"
+                             [attr.accept]="'.' + type.allowedExtensions.split(',').join(',.')"
+                             (change)="onDocumentChosen($event, type.id)" />
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+    </section>
+  }
+</div>
+
+<!--============================================================================
+  EXPERIENCE FORM
+=============================================================================-->
+<ui-modal
+  [open]="editingExperience() !== null"
+  [title]="editingExperience() === 'new' ? 'Add a school' : 'Edit this entry'"
+  size="md"
+  [closeOnBackdrop]="false"
+  (closed)="editingExperience.set(null)"
+>
+  <form class="experience-form" [formGroup]="experienceForm" (ngSubmit)="saveExperience()">
+    <div class="field">
+      <label class="field__label" for="schoolName">School name</label>
+      <input class="form-control" id="schoolName" type="text" formControlName="schoolName"
+             placeholder="Kendriya Vidyalaya, Andheri" />
+    </div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label class="field__label" for="expDesignation">
+          Your post <span class="field__optional">Optional</span>
+        </label>
+        <select class="form-control" id="expDesignation" formControlName="designationId">
+          <option [ngValue]="null">Choose…</option>
+          @for (item of designationOptions(); track item.id) {
+            <option [ngValue]="item.id">{{ item.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="expSubject">
+          Main subject <span class="field__optional">Optional</span>
+        </label>
+        <select class="form-control" id="expSubject" formControlName="subjectId">
+          <option [ngValue]="null">Choose…</option>
+          @for (item of subjects(); track item.id) {
+            <option [ngValue]="item.id">{{ item.name }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <!--
+      🔴 MONTHS, NOT DATES.
+
+      Nobody remembers the day they joined a school; everybody remembers the
+      month. Asking for a precision people do not have is how a form starts
+      feeling like an exam — and the database stores a calendar date, so the day
+      is filled in here rather than demanded.
+    -->
+    <div class="form-grid">
+      <div class="field">
+        <label class="field__label" for="fromMonth">Started</label>
+        <input class="form-control" id="fromMonth" type="month" formControlName="fromMonth" />
+      </div>
+
+      @if (!experienceForm.controls.isCurrent.value) {
+        <div class="field">
+          <label class="field__label" for="toMonth">Left</label>
+          <input class="form-control" id="toMonth" type="month" formControlName="toMonth" />
+        </div>
+      }
+    </div>
+
+    <label class="form-check">
+      <input class="form-check__input" type="checkbox"
+             [checked]="experienceForm.controls.isCurrent.value"
+             (change)="onIsCurrentChange($any($event.target).checked)" />
+      <span class="form-check__label">I work here now</span>
+    </label>
+  </form>
+
+  <ng-container footer>
+    <ui-button variant="ghost" (click)="editingExperience.set(null)">Cancel</ui-button>
+    <ui-button variant="primary" [loading]="savingExperience()" (click)="saveExperience()">Save</ui-button>
+  </ng-container>
+</ui-modal>
