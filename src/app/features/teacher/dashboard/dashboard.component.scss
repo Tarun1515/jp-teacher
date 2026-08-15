@@ -1,0 +1,59 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+// Three facts across, then the sections that do not exist yet. The tiles are a
+// grid rather than a flex row so the third one does not end up alone on a line
+// at an awkward width.
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: v.$space-4;
+  margin-bottom: v.$space-5;
+}
+
+// The two "not yet" panels are wider — they carry a sentence each, and at tile
+// width the copy would wrap into a column.
+.tiles--wide {
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  margin-bottom: 0;
+}
+
+app-profile-meter { display: block; margin-bottom: v.$space-5; }
+
+.tile .card__body {
+  @include m.flex-column(0.125rem);
+}
+
+.tile__label {
+  margin: 0;
+  font-size: var(--jp-font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--jp-text-subtle);
+}
+
+.tile__value {
+  margin: 0;
+  font-size: var(--jp-font-size-lg);
+  font-weight: var(--jp-font-weight-semibold);
+  line-height: var(--jp-line-height-snug);
+}
+
+.tile__meta {
+  margin: 0;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text-muted);
+  line-height: var(--jp-line-height-snug);
+}
+
+.tile__link {
+  margin-top: v.$space-2;
+  font-size: var(--jp-font-size-sm);
+}
+
+@include m.down(md) {
+  .tiles,
+  .tiles--wide {
+    grid-template-columns: 1fr;
+  }
+}

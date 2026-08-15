@@ -1,0 +1,200 @@
+<div class="page enter">
+  @if (loading()) {
+    <header class="page__header">
+      <div class="page__heading">
+        <span class="skeleton" style="width: 16rem; height: 1.75rem"></span>
+      </div>
+    </header>
+
+    <div class="tiles">
+      @for (tile of skeletonTiles; track tile) {
+        <div class="card">
+          <div class="card__body">
+            <span class="skeleton" style="width: 45%; height: 0.75rem"></span>
+            <span class="skeleton" style="width: 70%; margin-top: 0.75rem"></span>
+          </div>
+        </div>
+      }
+    </div>
+  } @else if (loadFailed()) {
+    <div class="card">
+      <div class="card__body text-center">
+        <p class="text-section-title">We could not load your dashboard</p>
+        <p class="text-helper">Nothing has been lost — this is usually a connection that dropped.</p>
+        <ui-button variant="primary" (click)="load()">Try again</ui-button>
+      </div>
+    </div>
+  } @else if (data(); as teacher) {
+    <header class="page__header">
+      <div class="page__heading">
+        <h1 class="page__title">
+          @if (teacher.fullName) {
+            {{ teacher.fullName }}
+          } @else {
+            Welcome
+          }
+        </h1>
+
+        <p class="page__description">
+          <!--
+            ⚠️ SOFT VERIFICATION (2.9). A teacher's account is Active from
+            signup and nothing here is gated on the badge — so the unverified
+            wording says what is true rather than implying a wait.
+          -->
+          @if (teacher.isVerified) {
+            Your profile is verified. Schools see the badge when they find you.
+          } @else {
+            Everything works while we check your documents — you can be found and
+            apply today. The badge follows.
+          }
+        </p>
+      </div>
+
+      <div class="page__actions">
+        @if (teacher.isSuspended) {
+          <ui-badge tone="danger">Suspended</ui-badge>
+        } @else if (teacher.isVerified) {
+          <ui-badge tone="success">Verified</ui-badge>
+        } @else {
+          <ui-badge tone="neutral">Not verified yet</ui-badge>
+        }
+      </div>
+    </header>
+
+    <!--
+      🔴 ONE completeness display, shared with the profile screen.
+
+      The component owns the rule: the server's number, no "0%" at zero, one
+      next step ordered by value per effort, and the 75% cap explained where it
+      bites (2.60). This screen only decides what "Take me there" means.
+    -->
+    @if (profile(); as full) {
+      <app-profile-meter
+        style="--jp-enter-index: 1"
+        [profile]="full"
+        actionLabel="Go to my profile"
+        (go)="goToProfile($event)"
+      />
+    }
+
+    <div class="tiles" style="--jp-enter-index: 2">
+      <!-- RESUME -->
+      <section class="card tile">
+        <div class="card__body">
+          <p class="tile__label">Your resume</p>
+
+          @if (teacher.hasResume) {
+            <p class="tile__value">On your profile</p>
+            <p class="tile__meta">
+              Schools see it once you apply to them, or accept an invitation —
+              never before that.
+            </p>
+            <a class="tile__link" routerLink="/profile" fragment="section-documents">
+              Replace it
+            </a>
+          } @else {
+            <p class="tile__value">Not uploaded</p>
+            <p class="tile__meta">
+              It is the biggest single thing on your profile, and the only thing
+              that takes you past 75%.
+            </p>
+            <a class="tile__link" routerLink="/profile" fragment="section-documents">
+              Upload your resume
+            </a>
+          }
+        </div>
+      </section>
+
+      <!-- WHAT YOU TEACH -->
+      <section class="card tile">
+        <div class="card__body">
+          <p class="tile__label">What you teach</p>
+
+          @if (teacher.subjectCount > 0) {
+            <p class="tile__value">
+              {{ teacher.subjectCount }}
+              {{ teacher.subjectCount === 1 ? 'subject' : 'subjects' }}
+            </p>
+          } @else {
+            <p class="tile__value">No subjects yet</p>
+          }
+
+          <p class="tile__meta">
+            @if (experienceLabel(); as label) {
+              {{ label }} of teaching experience
+            } @else {
+              No schools added yet
+            }
+          </p>
+
+          <a class="tile__link" routerLink="/profile" fragment="section-subjects">
+            Edit your profile
+          </a>
+        </div>
+      </section>
+
+      <!-- PLAN -->
+      <section class="card tile">
+        <div class="card__body">
+          <p class="tile__label">Your plan</p>
+          <p class="tile__value">{{ planLine() }}</p>
+
+          @if (teacher.plan.hasSubscription) {
+            <p class="tile__meta">
+              @if (teacher.plan.endsOnUtc) {
+                Runs until {{ teacher.plan.endsOnUtc | date: 'd MMM y' }}
+              } @else {
+                Does not expire
+              }
+            </p>
+          } @else {
+            <p class="tile__meta">
+              Every account should have one. Contact us and we will sort it out.
+            </p>
+          }
+
+          @if (teacher.documentCount > 0) {
+            <p class="tile__meta">
+              {{ teacher.verifiedDocumentCount }} of {{ teacher.documentCount }}
+              document{{ teacher.documentCount === 1 ? '' : 's' }} checked
+            </p>
+          }
+        </div>
+      </section>
+    </div>
+
+    <!--====================================================================
+      🔴 WHAT DOES NOT EXIST YET
+
+      No counts, no rows. Jobs are Phase 4 and applications Phase 5, and a
+      zero would be a measurement of something that cannot be measured.
+    =====================================================================-->
+    <div class="tiles tiles--wide" style="--jp-enter-index: 3">
+      <section class="card">
+        <div class="card__body">
+          <ui-empty-state
+            icon="🔍"
+            title="Jobs"
+            message="Teaching posts that match your subjects and the places you want to work."
+            actionLabel="Find jobs"
+            [actionDisabled]="true"
+            note="Job search arrives in a coming release. A complete profile is what gets you found when it does."
+          />
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__body">
+          <ui-empty-state
+            icon="📨"
+            title="Applications and invitations"
+            message="Where each application has got to, and any school that has invited you to apply."
+            actionLabel="See my applications"
+            [actionDisabled]="true"
+            note="Arrives with job search."
+          />
+        </div>
+      </section>
+    </div>
+  }
+</div>

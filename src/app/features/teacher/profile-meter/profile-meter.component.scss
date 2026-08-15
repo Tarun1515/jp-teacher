@@ -1,0 +1,109 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+:host {
+  display: block;
+}
+
+// -----------------------------------------------------------------------------
+// 🔴 THE METER
+// -----------------------------------------------------------------------------
+//
+// Progress and ONE next step, never a verdict. At 0% the percentage is not
+// shown at all — the headline is an invitation instead. Being told you have
+// achieved nothing before you have started is where people close the tab.
+.meter {
+  padding: v.$space-5;
+  background: var(--jp-surface);
+  border: 1px solid var(--jp-border);
+  border-left: 3px solid var(--jp-primary);
+  border-radius: var(--jp-radius-lg);
+}
+
+.meter__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: v.$space-3;
+}
+
+.meter__title {
+  margin: 0;
+  font-size: var(--jp-font-size-lg);
+  font-weight: var(--jp-font-weight-semibold);
+}
+
+.meter__percent {
+  font-size: var(--jp-font-size-lg);
+  font-weight: var(--jp-font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--jp-primary);
+}
+
+.meter__track {
+  position: relative;
+  height: 0.5rem;
+  margin: v.$space-3 0;
+  background: var(--jp-neutral-100);
+  border-radius: var(--jp-radius-full);
+  overflow: hidden;
+}
+
+.meter__fill {
+  display: block;
+  height: 100%;
+  background: var(--jp-primary);
+  border-radius: var(--jp-radius-full);
+  transition: width var(--jp-transition-base) var(--jp-easing);
+
+  @include m.reduced-motion { transition: none; }
+}
+
+// The cap, drawn where it bites. A bar that stops at 75 with nothing to explain
+// it reads as broken — and this one genuinely does stop there (2.54).
+.meter__cap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--jp-surface);
+  box-shadow: 0 0 0 1px var(--jp-warning);
+}
+
+.meter__next {
+  @include m.flex-column(v.$space-1);
+
+  align-items: flex-start;
+  padding-top: v.$space-2;
+}
+
+.meter__next-title {
+  margin: 0;
+  font-weight: var(--jp-font-weight-semibold);
+}
+
+.meter__points {
+  margin-left: v.$space-2;
+  padding: 0 v.$space-1;
+  font-size: var(--jp-font-size-xs);
+  font-weight: var(--jp-font-weight-semibold);
+  color: var(--jp-primary-800);
+  background: var(--jp-primary-soft);
+  border-radius: var(--jp-radius-sm);
+}
+
+.meter__next-why {
+  margin: 0 0 v.$space-2;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text-muted);
+  line-height: var(--jp-line-height-snug);
+}
+
+.meter__cap-note,
+.meter__done {
+  margin: v.$space-3 0 0;
+  padding-top: v.$space-3;
+  border-top: 1px solid var(--jp-border);
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text-muted);
+}

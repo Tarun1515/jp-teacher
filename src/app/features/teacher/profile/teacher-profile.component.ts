@@ -16,14 +16,8 @@ import {
   UiSelectOption,
 } from 'jp-shared/ui';
 
-import {
-  NextStep,
-  NO_RESUME_CAP,
-  ProfileSection,
-  completedCount,
-  isHeldByResumeCap,
-  nextStep,
-} from '../../../core/profile-completion';
+import { NO_RESUME_CAP, ProfileSection, isHeldByResumeCap } from '../../../core/profile-completion';
+import { ProfileMeterComponent } from '../profile-meter/profile-meter.component';
 import {
   SaveExperienceBody,
   TeacherDocument,
@@ -94,6 +88,7 @@ const PROFICIENCY = [
     UiButtonComponent,
     UiModalComponent,
     UiMultiSelectComponent,
+    ProfileMeterComponent,
   ],
   templateUrl: './teacher-profile.component.html',
   styleUrl: './teacher-profile.component.scss',
@@ -172,38 +167,6 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     fromMonth: ['', [Validators.required]],
     toMonth: [''],
     isCurrent: [false],
-  });
-
-  // =========================================================================
-  // COMPLETION — progress, never a verdict
-  // =========================================================================
-
-  protected readonly percent = computed(() => this.profile()?.profileCompletionPercent ?? 0);
-
-  protected readonly next = computed<NextStep | null>(() => nextStep(this.profile()));
-
-  protected readonly heldByResumeCap = computed(() => isHeldByResumeCap(this.profile()));
-
-  protected readonly doneCount = computed(() => completedCount(this.profile()));
-
-  protected readonly resumeCap = NO_RESUME_CAP;
-
-  /**
-   * The line above the bar.
-   *
-   * 🔴 Never "0% complete". Somebody at zero is being told they have achieved
-   * nothing before they have started, and that is exactly where people close the
-   * tab. At zero this is an invitation; in the middle it is progress; at the end
-   * it is a fact worth being pleased about.
-   */
-  protected readonly headline = computed(() => {
-    const percent = this.percent();
-
-    if (percent === 0) return 'Let’s get you found by schools';
-    if (percent >= 100) return 'Your profile is complete';
-    if (this.heldByResumeCap()) return 'One thing left';
-
-    return 'Your profile so far';
   });
 
   constructor() {
@@ -723,7 +686,11 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     if (!file) return;
 
     const hadResume = !!this.profile()?.resumePath;
-    const wasCapped = this.heldByResumeCap();
+
+    // ⚠️ Read through the same function the meter uses, not a second copy of
+    // the rule — this decides which sentence the teacher gets after the upload,
+    // and it has to agree with the bar they were just looking at (2.60).
+    const wasCapped = isHeldByResumeCap(this.profile());
 
     this.uploadingResume.set(true);
 
@@ -813,6 +780,14 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       error: () => this.toast.error('That file could not be opened.'),
     });
   }
+
+  /**
+   * The cap the resume lifts, for the copy in that section.
+   *
+   * ⚠️ Read from the same constant the meter uses. Two numbers meaning the same
+   * thing is how a screen ends up saying 75 in one place and 80 in another.
+   */
+  protected readonly resumeCap = NO_RESUME_CAP;
 
   protected readonly resumeHref = this.teachers.resumeUrl();
 

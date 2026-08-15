@@ -1,0 +1,59 @@
+<section class="meter">
+  <div class="meter__head">
+    <h2 class="meter__title">{{ headline() }}</h2>
+
+    <!--
+      🔴 NO PERCENTAGE AT ZERO. Being told you have achieved nothing before you
+      have started is exactly where people close the tab (2.60).
+    -->
+    @if (percent() > 0) {
+      <span class="meter__percent">{{ percent() }}%</span>
+    }
+  </div>
+
+  <div
+    class="meter__track"
+    role="progressbar"
+    [attr.aria-valuenow]="percent()"
+    aria-valuemin="0"
+    aria-valuemax="100"
+    [attr.aria-label]="'Profile completion: ' + percent() + ' per cent'"
+  >
+    <span class="meter__fill" [style.width.%]="percent()"></span>
+
+    <!--
+      ⚠️ The cap, drawn where it bites. A bar that stops moving with no
+      explanation reads as broken — and this one genuinely does stop at 75
+      until there is a resume.
+    -->
+    @if (!hasResume()) {
+      <span class="meter__cap" [style.left.%]="resumeCap" aria-hidden="true"></span>
+    }
+  </div>
+
+  @if (next(); as step) {
+    <div class="meter__next">
+      <p class="meter__next-title">
+        {{ step.title }}
+        <span class="meter__points">+{{ step.points }}%</span>
+      </p>
+      <p class="meter__next-why">{{ step.why }}</p>
+
+      <ui-button size="sm" variant="primary" (click)="go.emit(step.section)">
+        {{ actionLabel() }}
+      </ui-button>
+    </div>
+
+    @if (heldByResumeCap()) {
+      <p class="meter__cap-note">
+        Your profile is held at {{ resumeCap }}% until you add a resume — it is
+        the one thing left that moves the bar.
+      </p>
+    }
+  } @else {
+    <p class="meter__done">
+      Everything is filled in. Schools searching for what you teach will find
+      you with the full picture.
+    </p>
+  }
+</section>

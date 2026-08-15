@@ -91,7 +91,14 @@ export const routes: Routes = [
     canActivate: [authGuard, activeAccountGuard],
     component: TeacherLayoutComponent,
     children: [
-      { path: 'dashboard', loadComponent: comingSoon, data: { title: 'Dashboard' } },
+      {
+        path: 'dashboard',
+        loadComponent: () =>
+          import('./features/teacher/dashboard/dashboard.component').then(
+            (m) => m.TeacherDashboardComponent,
+          ),
+        data: { title: 'Dashboard' },
+      },
       {
         path: 'profile',
         loadComponent: () =>

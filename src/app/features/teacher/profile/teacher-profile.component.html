@@ -38,68 +38,19 @@
       </div>
     </div>
   } @else if (profile(); as teacher) {
-    <!--====================================================================
-      THE METER — progress and a next step, never a verdict
+    <!--
+      🔴 ONE completeness display, and this is it.
 
-      🔴 A teacher at 0% is never shown "0%". Being told you have achieved
-      nothing before you have started is exactly where people close the tab.
-      What they get is one thing to do and the reason it is worth doing.
-    =====================================================================-->
-    <section class="meter" style="--jp-enter-index: 1">
-      <div class="meter__head">
-        <h2 class="meter__title">{{ headline() }}</h2>
-
-        @if (percent() > 0) {
-          <span class="meter__percent">{{ percent() }}%</span>
-        }
-      </div>
-
-      <div
-        class="meter__track"
-        role="progressbar"
-        [attr.aria-valuenow]="percent()"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        [attr.aria-label]="'Profile completion: ' + percent() + ' per cent'"
-      >
-        <span class="meter__fill" [style.width.%]="percent()"></span>
-
-        <!--
-          ⚠️ The cap is drawn ON the bar, where it bites. A bar that stops
-          moving with no explanation reads as broken — and this one genuinely
-          does stop at 75 until there is a resume (2.54).
-        -->
-        @if (!teacher.resumePath) {
-          <span class="meter__cap" [style.left.%]="resumeCap" aria-hidden="true"></span>
-        }
-      </div>
-
-      @if (next(); as step) {
-        <div class="meter__next">
-          <p class="meter__next-title">
-            {{ step.title }}
-            <span class="meter__points">+{{ step.points }}%</span>
-          </p>
-          <p class="meter__next-why">{{ step.why }}</p>
-
-          <ui-button size="sm" variant="primary" (click)="scrollTo(step.section)">
-            Take me there
-          </ui-button>
-        </div>
-
-        @if (heldByResumeCap()) {
-          <p class="meter__cap-note">
-            Your profile is held at {{ resumeCap }}% until you add a resume — it is
-            the one thing left that moves the bar.
-          </p>
-        }
-      } @else {
-        <p class="meter__done">
-          Everything is filled in. Schools searching for what you teach will find
-          you with the full picture.
-        </p>
-      }
-    </section>
+      Extracted to a component in 3I so the dashboard could show the same thing.
+      A second display would be a second rule — the day one prints "0%" or names
+      a different next step, one of them is wrong and nobody knows which (2.60).
+    -->
+    <app-profile-meter
+      style="--jp-enter-index: 1"
+      [profile]="teacher"
+      actionLabel="Take me there"
+      (go)="scrollTo($event)"
+    />
 
     <!--====================================================================
       1. ABOUT YOU
