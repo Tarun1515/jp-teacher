@@ -1,0 +1,77 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+// -----------------------------------------------------------------------------
+// MY APPLICATIONS — the row's second line, and the phone reflow.
+//
+// 🔴 The page frame, the filter strip, the ruled table and the badges are the
+// design system (2.23). Nothing below re-declares them.
+// -----------------------------------------------------------------------------
+
+.application__title {
+  color: var(--jp-text);
+  font-weight: var(--jp-font-weight-medium);
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+}
+
+// The quiet second line under a cell's main value — the salary under a job
+// title, the campus under a school name.
+.application__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--jp-font-size-xs);
+  color: var(--jp-text-muted);
+}
+
+// -----------------------------------------------------------------------------
+// Below md the table stops being a table — same treatment as the school's
+// applicant list, because it is the same product and the same grammar (2.38).
+//
+//   [ job ......................... stage ]
+//   [ school · campus ..................... ]
+//   [ applied .............................. ]
+// -----------------------------------------------------------------------------
+@include m.down(md) {
+  .table {
+    thead { display: none; }
+
+    tbody tr {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: v.$space-1 v.$space-2;
+      padding: v.$space-3 v.$space-4;
+      border-bottom: var(--jp-rule-width) solid var(--jp-rule);
+    }
+
+    tbody tr:last-child { border-bottom: 0; }
+
+    tbody th,
+    tbody td {
+      display: block;
+      height: auto;
+      padding: 0;
+      border: 0;
+      text-align: left;
+    }
+
+    tbody th:nth-child(1) { flex: 1 1 auto; }
+
+    tbody td:nth-child(4) {
+      flex: 0 0 auto;
+      margin-left: auto;
+      text-align: right;
+    }
+
+    tbody td:nth-child(2) { flex: 1 0 100%; order: 1; }
+
+    tbody td:nth-child(3) {
+      flex: 1 0 100%;
+      order: 2;
+      font-size: var(--jp-font-size-xs);
+      color: var(--jp-text-muted);
+    }
+  }
+}

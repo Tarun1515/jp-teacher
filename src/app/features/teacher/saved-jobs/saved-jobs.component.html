@@ -1,0 +1,99 @@
+<div class="page">
+  <header class="page__header">
+    <div class="page__heading">
+      <h1 class="page__title">Saved jobs</h1>
+
+      <!--
+        🔒 SAID ON THE SCREEN, not only in the code. A shortlist that might be
+        visible to schools is a different product, and a teacher has no way to
+        tell the two apart by looking. Saving is interest; applying is consent
+        (2.56).
+      -->
+      <p class="page__description">
+        Postings you have kept to look at again. This list is yours alone —
+        no school is told that you saved anything.
+      </p>
+    </div>
+
+    <div class="page__actions">
+      <a class="btn btn--primary" routerLink="/jobs">Find jobs</a>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <p class="table__loading">Loading …</p>
+  } @else if (failed()) {
+    <p class="note" role="alert">
+      Your saved jobs could not be loaded. Nothing has been changed.
+    </p>
+  } @else if (rows().length === 0) {
+    <ui-empty-state
+      icon="🔖"
+      title="Nothing saved yet"
+      message="Tap the star on any job to keep it here. Saving tells the school nothing — it is a note to yourself."
+      actionLabel="Find jobs"
+      actionLink="/jobs"
+    />
+  } @else {
+    <div class="card-grid" style="--jp-enter-index: 1">
+      @for (row of rows(); track row.savedJobId) {
+        <article class="card saved" [class.saved--closed]="!isOpen(row)">
+          <div class="card__body">
+            <h2 class="saved__title">
+              @if (isOpen(row)) {
+                <a [routerLink]="['/jobs', row.jobId]">{{ row.jobTitle }}</a>
+              } @else {
+                <!--
+                  ⚠️ NOT A LINK when the posting has gone: the detail page
+                  answers 404 for a closed or expired job, and a link that
+                  lands on "this posting has gone" is worse than a row that
+                  says so first.
+                -->
+                {{ row.jobTitle }}
+              }
+            </h2>
+
+            <p class="saved__school">{{ row.schoolName }} · {{ locationLabel(row) }}</p>
+
+            <p class="saved__meta">
+              {{ name(designations(), row.designationId) }}
+              · {{ name(subjects(), row.subjectId) }}
+            </p>
+
+            <p class="saved__salary">{{ salaryLabel(row) }}</p>
+
+            <div class="saved__foot">
+              @if (row.hasApplied) {
+                <ui-badge tone="success" size="sm">Applied</ui-badge>
+              } @else if (!isOpen(row)) {
+                <!--
+                  🔴 The EFFECTIVE status, from the server. Nothing here
+                  compares a date — expiry is derived in IST server-side, and a
+                  browser with a wrong clock must not get its own opinion.
+                -->
+                <ui-badge tone="neutral" size="sm">Closed</ui-badge>
+              } @else if (row.lastDateToApply) {
+                <span class="saved__closes">
+                  Closes {{ row.lastDateToApply | date: 'd MMM yyyy' }}
+                </span>
+              }
+
+              <button
+                type="button"
+                class="btn btn--sm btn--ghost saved__remove"
+                [disabled]="busy() === row.jobId"
+                (click)="remove(row)"
+              >Remove</button>
+
+              @if (isOpen(row) && !row.hasApplied) {
+                <a class="btn btn--sm btn--primary" [routerLink]="['/jobs', row.jobId]">
+                  View and apply
+                </a>
+              }
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</div>

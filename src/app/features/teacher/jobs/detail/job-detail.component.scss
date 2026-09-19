@@ -1,0 +1,55 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+// -----------------------------------------------------------------------------
+// ONE POSTING — the two-column split and the prose blocks.
+//
+// 🔴 The page frame, cards, facts list, form controls, notes and buttons are
+// the design system (2.23). Nothing below re-declares them.
+// -----------------------------------------------------------------------------
+
+.job__back {
+  align-self: flex-start;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text-muted);
+  text-decoration: none;
+
+  &:hover { color: var(--jp-text); }
+}
+
+// The posting on the left, the decision on the right. The apply panel is
+// narrow and does not stretch: a full-width textarea beside a full-width button
+// reads as a form to fill in, where this is one short deliberate act.
+.job__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 21rem;
+  gap: v.$space-5;
+  align-items: start;
+}
+
+.job__main,
+.job__side {
+  @include m.flex-column(v.$space-5);
+
+  min-width: 0;
+}
+
+// Typed by a school, so it keeps their line breaks and wraps like prose.
+.job__prose {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--jp-font-size-sm);
+  line-height: var(--jp-line-height-relaxed);
+  color: var(--jp-text);
+}
+
+.job__apply {
+  width: 100%;
+  margin-top: v.$space-3;
+}
+
+@include m.down(lg) {
+  // One column below lg. The apply panel moves UNDER the posting, which is the
+  // order somebody reads on a phone: what the job is, then whether to take it.
+  .job__columns { grid-template-columns: minmax(0, 1fr); }
+}

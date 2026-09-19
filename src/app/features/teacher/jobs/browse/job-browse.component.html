@@ -1,0 +1,213 @@
+<div class="page">
+  <header class="page__header">
+    <div class="page__heading">
+      <h1 class="page__title">Find jobs</h1>
+      <p class="page__description">
+        Open teaching posts. Every one of these is still accepting applications
+        — a posting whose closing date has passed drops off this list on its own.
+      </p>
+    </div>
+
+    <div class="page__actions">
+      <a class="btn" routerLink="/saved-jobs">Saved jobs</a>
+      <a class="btn" routerLink="/applications">My applications</a>
+    </div>
+  </header>
+
+  <!--
+    🔴 EVERY OPTION IS A MASTER ROW (2.7). Nothing in this file is a hardcoded
+    list — the client adds a subject or renames an employment type as data, with
+    no deployment.
+  -->
+  <div class="page__toolbar" style="--jp-enter-index: 1">
+    <div class="page__toolbar__control">
+      <label class="visually-hidden" for="filter-subject">Subject</label>
+      <select
+        class="form-control"
+        id="filter-subject"
+        [ngModel]="subjectId()"
+        (ngModelChange)="subjectId.set($event); onFilterChange()"
+      >
+        <option [ngValue]="null">All subjects</option>
+        @for (s of subjects(); track s.id) {
+          <option [ngValue]="s.id">{{ s.name }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="page__toolbar__control">
+      <label class="visually-hidden" for="filter-employment">Employment type</label>
+      <select
+        class="form-control"
+        id="filter-employment"
+        [ngModel]="employmentTypeId()"
+        (ngModelChange)="employmentTypeId.set($event); onFilterChange()"
+      >
+        <option [ngValue]="null">Any type</option>
+        @for (t of employmentTypes(); track t.id) {
+          <option [ngValue]="t.id">{{ t.name }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="page__toolbar__control">
+      <label class="visually-hidden" for="filter-state">State</label>
+      <select
+        class="form-control"
+        id="filter-state"
+        [ngModel]="stateId()"
+        (ngModelChange)="stateId.set($event); onFilterChange()"
+      >
+        <option [ngValue]="null">Anywhere</option>
+        @for (s of states(); track s.id) {
+          <option [ngValue]="s.id">{{ s.name }}</option>
+        }
+      </select>
+    </div>
+
+    @if (hasFilters()) {
+      <button
+        type="button"
+        class="btn btn--ghost btn--sm page__toolbar__clear"
+        (click)="clearFilters()"
+      >Clear</button>
+    }
+  </div>
+
+  @if (loading()) {
+    <p class="table__loading">Loading jobs …</p>
+  } @else if (failed()) {
+    <p class="note" role="alert">Jobs could not be loaded. Nothing has been changed.</p>
+  } @else if (rows().length === 0) {
+    <!--
+      Two states, written out rather than one with ternaries in every input.
+      They differ in what the person should do next, which is the only thing an
+      empty state is for — and one of them navigates while the other runs a
+      handler, so they are not the same component call with different words.
+    -->
+    @if (hasFilters()) {
+      <ui-empty-state
+        icon="🔍"
+        title="No jobs match those filters"
+        message="Try a different subject, type or state — or clear the filters to see everything that is open."
+        actionLabel="Clear filters"
+        (action)="clearFilters()"
+      />
+    } @else {
+      <ui-empty-state
+        icon="🔍"
+        title="No open jobs right now"
+        message="There are no open postings at the moment. A complete profile is what gets you found when there are."
+        actionLabel="Complete your profile"
+        actionLink="/profile"
+      />
+    }
+  } @else {
+    <div class="card-grid" style="--jp-enter-index: 2">
+      @for (row of rows(); track row.jobId) {
+        <article class="card card--interactive job">
+          <div class="card__body">
+            <div class="job__head">
+              <div class="job__identity">
+                <h2 class="job__title">
+                  <a [routerLink]="['/jobs', row.jobId]">{{ row.jobTitle }}</a>
+                </h2>
+
+                <p class="job__school">
+                  {{ row.schoolName }}
+                  @if (row.isSchoolVerified) {
+                    <span class="badge badge--verified badge--sm">Verified</span>
+                  }
+                </p>
+              </div>
+
+              <!--
+                🔴 SAVING IS NOT APPLYING. This is a private bookmark: the
+                school is told nothing, and it unlocks nothing (2.56). Applying
+                happens on the job's own page, where the consequence can be
+                stated before somebody commits to it.
+              -->
+              <button
+                type="button"
+                class="job__save"
+                [class.job__save--on]="row.isSaved"
+                [disabled]="saving() === row.jobId"
+                [attr.aria-pressed]="row.isSaved"
+                [attr.aria-label]="row.isSaved ? 'Remove from saved jobs' : 'Save this job'"
+                (click)="toggleSaved(row, $event)"
+              >{{ row.isSaved ? '★' : '☆' }}</button>
+            </div>
+
+            <p class="job__meta">
+              {{ name(designations(), row.designationId) }}
+              · {{ name(subjects(), row.subjectId) }}
+              · {{ locationLabel(row) }}
+            </p>
+
+            <p class="job__salary">{{ salaryLabel(row) }}</p>
+
+            @if (experienceLabel(row)) {
+              <p class="job__meta">{{ experienceLabel(row) }}</p>
+            }
+
+            <div class="job__foot">
+              @if (row.hasApplied) {
+                <!--
+                  ⚠️ A fact, not a control. Applying twice is refused by the
+                  index and resolves to the application they already have, so
+                  the card simply says where they stand.
+                -->
+                <ui-badge tone="success" size="sm">Applied</ui-badge>
+              }
+
+              @if (row.lastDateToApply) {
+                <span class="job__closes">
+                  Closes {{ row.lastDateToApply | date: 'd MMM yyyy' }}
+                </span>
+              }
+
+              <a class="btn btn--sm btn--primary job__open" [routerLink]="['/jobs', row.jobId]">
+                {{ row.hasApplied ? 'View' : 'View and apply' }}
+              </a>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+
+    @if (totalPages() > 1) {
+      <nav class="table-pager" aria-label="Job pages">
+        <span class="table-pager__summary">
+          {{ rangeStart() }}–{{ rangeEnd() }} of {{ total() }}
+        </span>
+
+        <div class="table-pager__controls">
+          <button
+            type="button"
+            class="table-pager__page"
+            [disabled]="page() === 1"
+            (click)="goToPage(page() - 1)"
+            aria-label="Previous page"
+          >‹</button>
+
+          @for (number of pageNumbers(); track number) {
+            <button
+              type="button"
+              class="table-pager__page"
+              [attr.aria-current]="number === page() ? 'page' : null"
+              (click)="goToPage(number)"
+            >{{ number }}</button>
+          }
+
+          <button
+            type="button"
+            class="table-pager__page"
+            [disabled]="page() === totalPages()"
+            (click)="goToPage(page() + 1)"
+            aria-label="Next page"
+          >›</button>
+        </div>
+      </nav>
+    }
+  }
+</div>

@@ -1,0 +1,262 @@
+@if (loading()) {
+  <p class="table__loading">Loading …</p>
+} @else if (notFound() || !data()) {
+  <!--
+    🔴 EXPIRED, CLOSED AND NEVER-EXISTED ARE ONE SCREEN.
+
+    The server answers 404 for all three, and this is the honest rendering of
+    it: a page that still carried an Apply button the server would refuse wastes
+    the applicant's time and reads as a broken product.
+  -->
+  <div class="page">
+    <ui-empty-state
+      icon="📭"
+      title="This posting has gone"
+      message="It has either closed, passed its last date for applications, or was never here. Open jobs are all on the jobs page."
+      actionLabel="Find jobs"
+      actionLink="/jobs"
+    />
+  </div>
+} @else if (data(); as job) {
+  <div class="page">
+    <header class="page__header">
+      <div class="page__heading">
+        <a class="job__back" routerLink="/jobs">← Find jobs</a>
+
+        <h1 class="page__title">{{ job.jobTitle }}</h1>
+
+        <p class="page__description">
+          {{ job.schoolName }}
+          @if (job.isSchoolVerified) {
+            <span class="badge badge--verified badge--sm">Verified</span>
+          }
+          · {{ job.branchName }} · {{ locationLabel(job) }}
+        </p>
+      </div>
+
+      <div class="page__actions">
+        @if (job.hasApplied) {
+          <ui-badge tone="success">Applied</ui-badge>
+        }
+
+        <button
+          type="button"
+          class="btn"
+          [disabled]="busy()"
+          (click)="toggleSaved()"
+        >{{ job.isSaved ? '★ Saved' : '☆ Save' }}</button>
+      </div>
+    </header>
+
+    <div class="job__columns">
+      <!--==================================================================
+        LEFT — the posting
+      ===================================================================-->
+      <div class="job__main">
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title">The post</h2>
+          </div>
+
+          <div class="card__body">
+            <dl class="facts">
+              <div class="facts__item">
+                <dt>Subject</dt>
+                <dd>{{ name(subjects(), job.subjectId) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Designation</dt>
+                <dd>{{ name(designations(), job.designationId) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Type</dt>
+                <dd>{{ name(employmentTypes(), job.employmentTypeId) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Vacancies</dt>
+                <dd>{{ job.noOfVacancies }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Salary</dt>
+                <dd>{{ salaryLabel(job) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Experience</dt>
+                <dd>{{ experienceLabel(job) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Qualification</dt>
+                <dd>{{ name(qualifications(), job.qualificationId) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Class levels</dt>
+                <dd>{{ names(classLevels(), job.classLevelIds) }}</dd>
+              </div>
+
+              @if (job.workingDays) {
+                <div class="facts__item">
+                  <dt>Working days</dt>
+                  <dd>{{ job.workingDays }}</dd>
+                </div>
+              }
+
+              @if (job.timingFrom && job.timingTo) {
+                <div class="facts__item">
+                  <dt>Timings</dt>
+                  <dd>{{ timeLabel(job.timingFrom) }} – {{ timeLabel(job.timingTo) }}</dd>
+                </div>
+              }
+
+              @if (job.expectedJoiningDate) {
+                <div class="facts__item">
+                  <dt>Expected joining</dt>
+                  <dd>{{ job.expectedJoiningDate | date: 'd MMM yyyy' }}</dd>
+                </div>
+              }
+
+              @if (job.lastDateToApply) {
+                <div class="facts__item">
+                  <dt>Applications close</dt>
+                  <dd>{{ job.lastDateToApply | date: 'd MMM yyyy' }}</dd>
+                </div>
+              }
+            </dl>
+          </div>
+        </section>
+
+        @if (job.jobDescription) {
+          <section class="card">
+            <div class="card__header">
+              <h2 class="card__title">What the school says</h2>
+            </div>
+            <div class="card__body">
+              <p class="job__prose">{{ job.jobDescription }}</p>
+            </div>
+          </section>
+        }
+
+        @if (job.aboutSchool) {
+          <section class="card">
+            <div class="card__header">
+              <h2 class="card__title">About {{ job.schoolName }}</h2>
+            </div>
+            <div class="card__body">
+              <p class="job__prose">{{ job.aboutSchool }}</p>
+            </div>
+          </section>
+        }
+      </div>
+
+      <!--==================================================================
+        RIGHT — applying
+      ===================================================================-->
+      <aside class="job__side">
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title">Apply</h2>
+          </div>
+
+          <div class="card__body">
+            @if (job.hasApplied) {
+              <p class="note">
+                You applied to this job. The school can see your profile and
+                contact you, and you can follow what happens next on
+                <a routerLink="/applications">my applications</a>.
+              </p>
+            } @else if (expired()) {
+              <!--
+                🔴 ABSENT, NOT DISABLED. The posting closed; no amount of
+                waiting or retrying changes that, so the control is gone and
+                the fact takes its place.
+              -->
+              <p class="note" role="alert">
+                Applications for this post have closed
+                @if (job.lastDateToApply) {
+                  — the last date was {{ job.lastDateToApply | date: 'd MMM yyyy' }}.
+                } @else {
+                  .
+                }
+              </p>
+
+              <a class="btn btn--primary" routerLink="/jobs">Find other jobs</a>
+            } @else {
+              @if (resumeMissing()) {
+                <!--
+                  🔴 "NOT YET", NOT "NOT ALLOWED" (2.62).
+
+                  The refusal names the missing piece and links straight to the
+                  place it is fixed. The Apply control STAYS — this is a fact
+                  about what is missing, not about who they are, and it stops
+                  being true the moment they upload a file.
+                -->
+                <p class="note" role="alert">
+                  <strong>Add a resume first.</strong>
+                  Schools read one before anything else, so an application
+                  without it would not get you far.
+                  <a routerLink="/profile" fragment="section-documents">
+                    Upload your resume
+                  </a>, then apply here.
+                </p>
+              }
+
+              <label class="field__label" for="cover-note">
+                A note to the school
+                <span class="field__optional">(optional)</span>
+              </label>
+              <textarea
+                class="form-control"
+                id="cover-note"
+                rows="4"
+                maxlength="2000"
+                placeholder="Why this post, and anything your profile does not already say"
+                [ngModel]="coverNote()"
+                (ngModelChange)="coverNote.set($event)"
+              ></textarea>
+
+              <!--
+                🔒 THE CONSEQUENCE, BEFORE THE BUTTON. Applying is consent
+                (2.56): it is what opens this teacher's email and mobile to THIS
+                school. And it cannot be undone from here (G28). Somebody
+                handing over their phone number is entitled to know it.
+              -->
+              <p class="field__helper">
+                Applying shares your profile, your resume and your contact
+                details with {{ job.schoolName }} — and with nobody else. You
+                cannot undo an application once it is sent.
+              </p>
+
+              <button
+                type="button"
+                class="btn btn--primary job__apply"
+                [disabled]="busy()"
+                (click)="apply()"
+              >{{ busy() ? 'Sending …' : 'Apply for this job' }}</button>
+            }
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card__body">
+            <dl class="facts facts--stack">
+              <div class="facts__item">
+                <dt>Applicants so far</dt>
+                <!--
+                  🔴 DERIVED by the server on every read. The stored column is
+                  never written (024) — a maintained counter drifts silently.
+                -->
+                <dd>{{ job.applicationCount }}</dd>
+              </div>
+
+              @if (job.publishedOn) {
+                <div class="facts__item">
+                  <dt>Posted</dt>
+                  <dd>{{ job.publishedOn | date: 'd MMM yyyy' }}</dd>
+                </div>
+              }
+            </dl>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+}

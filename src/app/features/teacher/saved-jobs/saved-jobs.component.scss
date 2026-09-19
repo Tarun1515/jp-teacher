@@ -1,0 +1,80 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+// -----------------------------------------------------------------------------
+// SAVED JOBS — the card's own detail.
+//
+// 🔴 The page frame, the card grid and the badges are the design system (2.23).
+// -----------------------------------------------------------------------------
+
+.saved {
+  .card__body {
+    display: flex;
+    flex-direction: column;
+    gap: v.$space-2;
+    height: 100%;
+  }
+}
+
+// A posting that has gone recedes as a whole rather than being struck through —
+// the same rule the ruled tables use for a closed row. It stays on the list
+// because silently dropping it would leave somebody wondering where a job they
+// remember saving went.
+.saved--closed {
+  .saved__title,
+  .saved__salary { color: var(--jp-text-muted); }
+}
+
+.saved__title {
+  margin: 0;
+  font-size: var(--jp-font-size-base);
+  font-weight: var(--jp-font-weight-semibold);
+  line-height: var(--jp-line-height-snug);
+
+  a {
+    color: var(--jp-text);
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; }
+  }
+}
+
+.saved__school {
+  margin: 2px 0 0;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text-muted);
+}
+
+.saved__meta {
+  margin: 0;
+  font-size: var(--jp-font-size-xs);
+  color: var(--jp-text-muted);
+}
+
+.saved__salary {
+  margin: 0;
+  font-size: var(--jp-font-size-sm);
+  font-weight: var(--jp-font-weight-medium);
+  color: var(--jp-text);
+}
+
+.saved__foot {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: v.$space-3;
+  border-top: var(--jp-rule-width) solid var(--jp-rule);
+}
+
+.saved__closes {
+  font-size: var(--jp-font-size-xs);
+  color: var(--jp-text-muted);
+}
+
+.saved__remove { margin-left: auto; }
+
+@include m.down(sm) {
+  .saved__remove { margin-left: 0; }
+}

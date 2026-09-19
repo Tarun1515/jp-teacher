@@ -1,0 +1,72 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+// -----------------------------------------------------------------------------
+// ONE OF MY APPLICATIONS — the split and the timeline.
+//
+// 🔴 The page frame, cards, facts list and badges are the design system (2.23).
+// -----------------------------------------------------------------------------
+
+.application__back {
+  align-self: flex-start;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text-muted);
+  text-decoration: none;
+
+  &:hover { color: var(--jp-text); }
+}
+
+.application__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 21rem;
+  gap: v.$space-5;
+  align-items: start;
+}
+
+.application__main,
+.application__side {
+  @include m.flex-column(v.$space-5);
+
+  min-width: 0;
+}
+
+.application__prose {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--jp-font-size-sm);
+  line-height: var(--jp-line-height-relaxed);
+  color: var(--jp-text);
+}
+
+// The same timeline grammar as the school's applicant detail — one product,
+// one language (2.38). Oldest first: it is read as a narrative, not a feed.
+.timeline {
+  margin: 0 0 v.$space-4;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline__item {
+  padding: v.$space-3 0;
+  border-bottom: var(--jp-rule-width) solid var(--jp-rule);
+
+  &:first-child { padding-top: 0; }
+  &:last-child { padding-bottom: 0; border-bottom: 0; }
+}
+
+.timeline__title {
+  margin: 0;
+  font-size: var(--jp-font-size-sm);
+  font-weight: var(--jp-font-weight-medium);
+  color: var(--jp-text);
+}
+
+.timeline__meta {
+  margin: 2px 0 0;
+  font-size: var(--jp-font-size-xs);
+  color: var(--jp-text-muted);
+}
+
+@include m.down(lg) {
+  .application__columns { grid-template-columns: minmax(0, 1fr); }
+}

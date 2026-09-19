@@ -1,0 +1,144 @@
+@if (loading()) {
+  <p class="table__loading">Loading …</p>
+} @else if (notFound() || !data()) {
+  <!--
+    🔴 Another teacher's application, and one that never existed, are the same
+    screen — "not yours" would confirm it exists (2.6).
+  -->
+  <div class="page">
+    <ui-empty-state
+      icon="🔎"
+      title="That application was not found"
+      message="It may have been removed, or the link may be wrong."
+      actionLabel="My applications"
+      actionLink="/applications"
+    />
+  </div>
+} @else if (data(); as a) {
+  <div class="page">
+    <header class="page__header">
+      <div class="page__heading">
+        <a class="application__back" routerLink="/applications">← My applications</a>
+
+        <h1 class="page__title">{{ a.jobTitle }}</h1>
+
+        <p class="page__description">
+          {{ a.schoolName }} · {{ a.branchName }} · {{ locationLabel(a) }}
+        </p>
+      </div>
+
+      <div class="page__actions">
+        <!--
+          🔴 The teacher's word, from the server — "Not selected", never
+          "Rejected".
+        -->
+        <ui-badge [tone]="tone(a.applicationStatusId)">{{ a.statusName }}</ui-badge>
+      </div>
+    </header>
+
+    <div class="application__columns">
+      <div class="application__main">
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title">What you applied for</h2>
+          </div>
+
+          <div class="card__body">
+            <dl class="facts">
+              <div class="facts__item">
+                <dt>Subject</dt>
+                <dd>{{ name(subjects(), a.subjectId) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Designation</dt>
+                <dd>{{ name(designations(), a.designationId) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Type</dt>
+                <dd>{{ name(employmentTypes(), a.employmentTypeId) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Salary</dt>
+                <dd>{{ salaryLabel(a) }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>You applied</dt>
+                <dd>{{ a.appliedOn | date: 'd MMM yyyy' }}</dd>
+              </div>
+              <div class="facts__item">
+                <dt>Resume</dt>
+                <!--
+                  🔴 The SNAPSHOT, said from the teacher's side. Replacing the
+                  CV on the profile does not change what this school was sent,
+                  and somebody who has just updated it deserves to know that.
+                -->
+                <dd>
+                  {{ a.hasResume ? 'Sent with this application' : 'Not attached' }}
+                </dd>
+              </div>
+            </dl>
+
+            @if (a.hasResume) {
+              <p class="field__helper">
+                The school reads the resume as it was on the day you applied.
+                Updating your profile does not change this copy.
+              </p>
+            }
+          </div>
+        </section>
+
+        @if (a.coverNote) {
+          <section class="card">
+            <div class="card__header">
+              <h2 class="card__title">Your note</h2>
+            </div>
+            <div class="card__body">
+              <p class="application__prose">{{ a.coverNote }}</p>
+            </div>
+          </section>
+        }
+
+        @if (a.jobDescription) {
+          <section class="card">
+            <div class="card__header">
+              <h2 class="card__title">The posting</h2>
+            </div>
+            <div class="card__body">
+              <p class="application__prose">{{ a.jobDescription }}</p>
+            </div>
+          </section>
+        }
+      </div>
+
+      <aside class="application__side">
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title">Progress</h2>
+          </div>
+
+          <div class="card__body">
+            <ol class="timeline">
+              @for (step of a.history; track step.changedOn) {
+                <li class="timeline__item">
+                  <p class="timeline__title">{{ step.statusName }}</p>
+                  <p class="timeline__meta">{{ step.changedOn | date: 'd MMM yyyy' }}</p>
+                </li>
+              }
+            </ol>
+
+            <!--
+              ⚠️ NO WITHDRAW, AND NO DISABLED ONE (G28). A control implying one
+              is coming would be a promise nobody has designed yet; a
+              soft-deleted application would revoke this school's contact access
+              through a path nobody designed either.
+            -->
+            <p class="field__helper">
+              The school updates this as they work through applicants. You do
+              not need to do anything while it is in progress.
+            </p>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+}

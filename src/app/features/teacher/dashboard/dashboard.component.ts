@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { Router, RouterLink } from '@angular/router';
 import { UiBadgeComponent, UiButtonComponent, UiEmptyStateComponent } from 'jp-shared/ui';
 
+import { JobSearchService, TeacherApplicationStats } from '../../../core/job-search.service';
 import { DashboardService, TeacherDashboard } from '../../../core/dashboard.service';
 import { ProfileSection } from '../../../core/profile-completion';
 import { TeacherProfile, TeacherService } from '../../../core/teacher.service';
@@ -48,6 +49,19 @@ import { ProfileMeterComponent } from '../profile-meter/profile-meter.component'
 })
 export class TeacherDashboardComponent {
   private readonly dashboards = inject(DashboardService);
+  private readonly jobs = inject(JobSearchService);
+
+  /**
+   * The applications area's real numbers (Phase 5B).
+   *
+   * 🔴 ITS OWN CALL, like the school dashboard's two. The dashboard endpoint
+   * composes the profile and its meter; applications are a different subsystem,
+   * and folding them in would mean one failure takes the whole screen down.
+   *
+   * 🔴 NO PARAMETERS. The server resolves the teacher from the token — there is
+   * nothing here that could point at somebody else's applications (2.39).
+   */
+  protected readonly appStats = signal<TeacherApplicationStats | null>(null);
   private readonly teachers = inject(TeacherService);
   private readonly router = inject(Router);
 
@@ -115,6 +129,12 @@ export class TeacherDashboardComponent {
     this.teachers.getProfile().subscribe({
       next: (profile) => this.profile.set(profile),
       error: () => this.profile.set(null),
+    });
+
+    // Same shape again: its own call, its own failure, its own tile.
+    this.jobs.stats().subscribe({
+      next: (stats) => this.appStats.set(stats),
+      error: () => this.appStats.set(null),
     });
   }
 

@@ -57,3 +57,84 @@ app-profile-meter { display: block; margin-bottom: v.$space-5; }
     grid-template-columns: 1fr;
   }
 }
+
+// -----------------------------------------------------------------------------
+// MY APPLICATIONS AREA (Phase 5B)
+//
+// Real counts, replacing the placeholder 3I had to show. The same grammar as
+// the school dashboard's jobs and applicants tiles — one product, one language
+// (2.38): four figures, then the five most recent.
+//
+// 🔴 "In progress" leads because it is the number a teacher actually looks for.
+// It is a SUM OF THE SERVER'S counts, never a second opinion about which
+// statuses count as open.
+// -----------------------------------------------------------------------------
+.apps__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: v.$space-3;
+  margin-bottom: v.$space-3;
+}
+
+.apps__counts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: v.$space-3;
+  margin: 0 0 v.$space-4;
+}
+
+.apps__count {
+  dt {
+    color: var(--jp-text-muted);
+    font-size: var(--jp-font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  dd {
+    // Tabular so the four numbers line up as a row of figures rather than
+    // drifting against each other.
+    @include m.tabular;
+
+    margin: 2px 0 0;
+    font-size: var(--jp-font-size-lg);
+    font-weight: var(--jp-font-weight-semibold);
+  }
+}
+
+.apps__recent {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.apps__row {
+  padding: v.$space-2 0;
+  border-top: 1px solid var(--jp-border);
+}
+
+.apps__link {
+  color: var(--jp-text);
+  font-size: var(--jp-font-size-sm);
+  font-weight: var(--jp-font-weight-medium);
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+}
+
+.apps__meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--jp-text-muted);
+  font-size: var(--jp-font-size-xs);
+}
+
+.apps__loading {
+  color: var(--jp-text-muted);
+  font-size: var(--jp-font-size-sm);
+}
+
+@media (max-width: 40rem) {
+  .apps__counts { grid-template-columns: repeat(2, 1fr); }
+}

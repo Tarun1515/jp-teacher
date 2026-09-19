@@ -1,0 +1,122 @@
+<div class="page">
+  <header class="page__header">
+    <div class="page__heading">
+      <h1 class="page__title">My applications</h1>
+      <p class="page__description">
+        Every job you have applied to, and where each one has got to. Schools
+        update these as they work through applicants.
+      </p>
+    </div>
+
+    <div class="page__actions">
+      <a class="btn" routerLink="/saved-jobs">Saved jobs</a>
+      <a class="btn btn--primary" routerLink="/jobs">Find jobs</a>
+    </div>
+  </header>
+
+  @if (rows().length > 0) {
+    <!--
+      🔴 A FILTER STRIP, NOT TABS, AND NOT BY ACCIDENT.
+
+      `.tabs` is hand-rolled in three components with three slightly different
+      sets of rules and is not in the design system (G27). Adding a fourth copy
+      would have made that worse, and promoting it in this phase would have
+      leaked properties into screens that deliberately omit them. The strip is
+      already shared, already used by the school's applicant list, and says the
+      same thing.
+
+      🔴 Every option is a row's OWN teacher-facing word, with its count — so
+      the filter can never say "Rejected" above a row that says "Not selected".
+    -->
+    <div class="page__toolbar" style="--jp-enter-index: 1">
+      <div class="page__toolbar__control">
+        <label class="visually-hidden" for="filter-stage">Stage</label>
+        <select
+          class="form-control"
+          id="filter-stage"
+          [ngModel]="statusId()"
+          (ngModelChange)="setFilter($event)"
+        >
+          <option [ngValue]="null">All ({{ rows().length }})</option>
+          @for (tab of tabs(); track tab.id) {
+            <option [ngValue]="tab.id">{{ tab.label }} ({{ tab.count }})</option>
+          }
+        </select>
+      </div>
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="table__loading">Loading …</p>
+  } @else if (failed()) {
+    <p class="note" role="alert">
+      Your applications could not be loaded. Nothing has been changed.
+    </p>
+  } @else if (rows().length === 0) {
+    <ui-empty-state
+      icon="📨"
+      title="You have not applied to anything yet"
+      message="Open postings are on the jobs page. Applying shares your profile and resume with that school — and with nobody else."
+      actionLabel="Find jobs"
+      actionLink="/jobs"
+    />
+  } @else if (filtered().length === 0) {
+    <ui-empty-state
+      icon="🔍"
+      title="Nothing at that stage"
+      message="Choose another stage, or see all of your applications."
+      actionLabel="See all"
+      (action)="setFilter(null)"
+    />
+  } @else {
+    <div class="table-wrap" style="--jp-enter-index: 2">
+      <table class="table table--hover">
+        <caption class="visually-hidden">
+          Your applications, {{ filtered().length }} shown
+        </caption>
+
+        <thead>
+          <tr>
+            <th scope="col">Job</th>
+            <th scope="col">School</th>
+            <th scope="col">Applied</th>
+            <th scope="col" class="table__actions">Stage</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (row of filtered(); track row.applicationId) {
+            <tr [class]="rowState(row)" class="table__row--clickable" (click)="open(row)">
+              <th scope="row" class="table__primary">
+                <a
+                  class="application__title"
+                  [routerLink]="['/applications', row.applicationId]"
+                  (click)="$event.stopPropagation()"
+                >{{ row.jobTitle }}</a>
+
+                <span class="application__meta">{{ salaryLabel(row) }}</span>
+              </th>
+
+              <td>
+                {{ row.schoolName }}
+                <span class="application__meta">{{ row.branchName }}</span>
+              </td>
+
+              <td class="table__code">{{ row.appliedOn | date: 'd MMM yyyy' }}</td>
+
+              <td class="table__actions">
+                <!--
+                  🔴 THE TEACHER'S WORD, straight from the server —
+                  TeacherFacingName. "Not selected", never "Rejected"; "Seen by
+                  the school", never "Viewed". This file has no list of status
+                  names to get out of step.
+                -->
+                <ui-badge [tone]="tone(row)" size="sm">{{ row.statusName }}</ui-badge>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</div>

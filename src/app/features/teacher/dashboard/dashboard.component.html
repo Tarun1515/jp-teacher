@@ -164,35 +164,103 @@
     </div>
 
     <!--====================================================================
-      🔴 WHAT DOES NOT EXIST YET
+      🔴 PHASE 5B — BOTH OF THESE ARE REAL NOW.
 
-      No counts, no rows. Jobs are Phase 4 and applications Phase 5, and a
-      zero would be a measurement of something that cannot be measured.
+      3I left two placeholders here because t_app_jobs and t_app_applications
+      did not exist, and a zero would have been a measurement of something
+      unmeasurable — indistinguishable from a teacher who had applied to
+      nothing.
+
+      Both tables exist, so both tiles show what is actually there. A teacher
+      who has applied to nothing gets a real zero and copy about THEIR OWN
+      state, where the old copy was a promise about a release (2.62).
+
+      ⚠️ Nothing else on this screen moved. The profile meter, the tiles above
+      and the verification banner are byte-identical.
     =====================================================================-->
     <div class="tiles tiles--wide" style="--jp-enter-index: 3">
       <section class="card">
         <div class="card__body">
           <ui-empty-state
             icon="🔍"
-            title="Jobs"
-            message="Teaching posts that match your subjects and the places you want to work."
+            title="Find jobs"
+            message="Open teaching posts, filtered by subject, type and where you want to work. Applying is free and always will be."
             actionLabel="Find jobs"
-            [actionDisabled]="true"
-            note="Job search arrives in a coming release. A complete profile is what gets you found when it does."
+            actionLink="/jobs"
           />
         </div>
       </section>
 
       <section class="card">
         <div class="card__body">
-          <ui-empty-state
-            icon="📨"
-            title="Applications and invitations"
-            message="Where each application has got to, and any school that has invited you to apply."
-            actionLabel="See my applications"
-            [actionDisabled]="true"
-            note="Arrives with job search."
-          />
+          @if (appStats(); as stats) {
+            @if (stats.totalApplications === 0) {
+              <!--
+                A real zero. "You have not applied to anything yet" is a
+                measurement of this teacher; the copy it replaced was a promise
+                about a release.
+              -->
+              <ui-empty-state
+                icon="📨"
+                title="My applications"
+                message="You have not applied to anything yet. Applying shares your profile and resume with that school — and with nobody else."
+                actionLabel="Find jobs"
+                actionLink="/jobs"
+              />
+            } @else {
+              <div class="apps__head">
+                <h2 class="card__title">My applications</h2>
+                <a class="link" routerLink="/applications">See all</a>
+              </div>
+
+              <dl class="apps__counts">
+                <div class="apps__count">
+                  <dt>In progress</dt>
+                  <!--
+                    Everything that has not ended. The SERVER counts each
+                    status; this is a sum of its numbers, not a second opinion
+                    about what "in progress" means.
+                  -->
+                  <dd>
+                    {{ stats.appliedCount + stats.viewedCount
+                       + stats.shortlistedCount + stats.interviewCount }}
+                  </dd>
+                </div>
+                <div class="apps__count">
+                  <dt>Shortlisted</dt>
+                  <dd>{{ stats.shortlistedCount }}</dd>
+                </div>
+                <div class="apps__count">
+                  <dt>Selected</dt>
+                  <dd>{{ stats.selectedCount }}</dd>
+                </div>
+                <div class="apps__count">
+                  <dt>Saved</dt>
+                  <dd>{{ stats.savedJobCount }}</dd>
+                </div>
+              </dl>
+
+              <ul class="apps__recent">
+                @for (item of stats.recent; track item.applicationId) {
+                  <li class="apps__row">
+                    <a class="apps__link" [routerLink]="['/applications', item.applicationId]">
+                      {{ item.jobTitle }}
+                    </a>
+                    <!--
+                      🔴 The TEACHER's word for the status — TeacherFacingName,
+                      straight from the server. "Not selected", never
+                      "Rejected".
+                    -->
+                    <span class="apps__meta">
+                      {{ item.schoolName }} · {{ item.statusName }}
+                    </span>
+                  </li>
+                }
+              </ul>
+            }
+          } @else {
+            <p class="apps__loading">Loading your applications …</p>
+          }
         </div>
       </section>
     </div>

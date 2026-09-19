@@ -113,9 +113,60 @@ export const routes: Routes = [
         canDeactivate: [unsavedChangesGuard],
         data: { title: 'My profile' },
       },
-      { path: 'jobs', loadComponent: comingSoon, data: { title: 'Find jobs' } },
-      { path: 'applications', loadComponent: comingSoon, data: { title: 'My applications' } },
-      { path: 'saved-jobs', loadComponent: comingSoon, data: { title: 'Saved jobs' } },
+      /*
+        🔴 PHASE 5B — the three placeholders became screens.
+
+        Their menu rows were always visible (TEACHER_JOBS, TEACHER_APPLICATIONS,
+        TEACHER_SAVED_JOBS, IsMenuVisible = 1) and pointed at `comingSoon`
+        pages, which was honest while t_app_jobs and t_app_applications did not
+        exist. They exist now, so no seed change is needed on this side — only
+        these three routes.
+
+        ⚠️ /invitations, /documents and /notifications stay placeholders,
+        deliberately. Invites are Phase 6 and notifications are Phase 6 as well;
+        a screen built on a table that does not exist is exactly what 3I spent
+        the phase removing.
+      */
+      {
+        path: 'jobs',
+        loadComponent: () =>
+          import('./features/teacher/jobs/browse/job-browse.component').then(
+            (m) => m.JobBrowseComponent,
+          ),
+        data: { title: 'Find jobs' },
+      },
+      {
+        path: 'jobs/:jobId',
+        loadComponent: () =>
+          import('./features/teacher/jobs/detail/job-detail.component').then(
+            (m) => m.JobDetailComponent,
+          ),
+        data: { title: 'Job' },
+      },
+      {
+        path: 'applications',
+        loadComponent: () =>
+          import('./features/teacher/applications/list/my-applications.component').then(
+            (m) => m.MyApplicationsComponent,
+          ),
+        data: { title: 'My applications' },
+      },
+      {
+        path: 'applications/:applicationId',
+        loadComponent: () =>
+          import('./features/teacher/applications/detail/my-application.component').then(
+            (m) => m.MyApplicationComponent,
+          ),
+        data: { title: 'My application' },
+      },
+      {
+        path: 'saved-jobs',
+        loadComponent: () =>
+          import('./features/teacher/saved-jobs/saved-jobs.component').then(
+            (m) => m.SavedJobsComponent,
+          ),
+        data: { title: 'Saved jobs' },
+      },
       { path: 'invitations', loadComponent: comingSoon, data: { title: 'Invitations' } },
       { path: 'documents', loadComponent: comingSoon, data: { title: 'Documents' } },
       { path: 'notifications', loadComponent: comingSoon, data: { title: 'Notifications' } },

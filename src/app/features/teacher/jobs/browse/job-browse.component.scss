@@ -1,0 +1,109 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+// -----------------------------------------------------------------------------
+// FIND JOBS — the card's own detail.
+//
+// 🔴 The page frame, the filter strip, the card grid, the pager and the badges
+// are the design system (2.23). Nothing below re-declares them and nothing
+// below invents a colour or a size.
+// -----------------------------------------------------------------------------
+
+.job {
+  // The foot pins to the bottom, so cards of different heights still line their
+  // actions up along one edge — a grid of cards with the buttons at random
+  // heights reads as broken before it reads as varied.
+  .card__body {
+    display: flex;
+    flex-direction: column;
+    gap: v.$space-2;
+    height: 100%;
+  }
+}
+
+.job__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: v.$space-2;
+}
+
+.job__identity { min-width: 0; }
+
+.job__title {
+  margin: 0;
+  font-size: var(--jp-font-size-base);
+  font-weight: var(--jp-font-weight-semibold);
+  line-height: var(--jp-line-height-snug);
+
+  a {
+    color: var(--jp-text);
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; }
+  }
+}
+
+.job__school {
+  margin: 2px 0 0;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text-muted);
+}
+
+.job__meta {
+  margin: 0;
+  font-size: var(--jp-font-size-xs);
+  color: var(--jp-text-muted);
+}
+
+.job__salary {
+  margin: 0;
+  font-size: var(--jp-font-size-sm);
+  font-weight: var(--jp-font-weight-medium);
+  color: var(--jp-text);
+}
+
+// The bookmark. Quiet until it is on, because most cards will not be saved and
+// a grid of filled stars would read as a status rather than a choice.
+.job__save {
+  @include m.focus-ring;
+
+  flex-shrink: 0;
+  padding: 0 v.$space-1;
+  background: none;
+  border: 0;
+  color: var(--jp-text-subtle);
+  font-size: var(--jp-font-size-lg);
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover { color: var(--jp-warning); }
+
+  &--on { color: var(--jp-warning); }
+
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+.job__foot {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: v.$space-3;
+  border-top: var(--jp-rule-width) solid var(--jp-rule);
+}
+
+.job__closes {
+  font-size: var(--jp-font-size-xs);
+  color: var(--jp-text-muted);
+}
+
+.job__open { margin-left: auto; }
+
+@include m.down(sm) {
+  .job__open {
+    margin-left: 0;
+    width: 100%;
+  }
+}
