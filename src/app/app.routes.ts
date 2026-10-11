@@ -207,6 +207,33 @@ export const routes: Routes = [
       },
       { path: 'documents', loadComponent: comingSoon, data: { title: 'Documents' } },
       /*
+        Phase 6.5B — the billing page both portals route AT.
+
+        🔴 The component lives in jp-shared and BOTH apps load it directly, the
+        same shape `/notifications` took in 6C-2 and for the same reason: a
+        school and a teacher ask the identical four questions — what am I on,
+        what have I used, what else is there, how do I move — and every route
+        behind them reads the owner from the caller's token (2.39, 2.51). There
+        is nothing portal-specific to wrap, and G27's lesson is that the second
+        copy is where two identical screens start to disagree.
+
+        ⚠️ No permission guard, and that is not an oversight. "What plan am I
+        on" is not granted by a role — it is a property of the account — and the
+        server scopes every read to the token's owner. The seeded menu row
+        carries no PermissionCode for the same reason.
+
+        🔴 The ADMIN side is a different screen entirely (a payments queue
+        behind PAYMENT.VERIFY) and lives in jp-admin. Sharing a route between
+        "my plan" and "everyone's payments" would be sharing a name, not a
+        screen.
+      */
+      {
+        path: 'billing',
+        loadComponent: () =>
+          import('jp-shared/ui').then((m) => m.UiBillingPageComponent),
+        data: { title: 'Plan and billing' },
+      },
+      /*
         Phase 6C-2 — the notification page both portals route AT.
 
         🔴 The component lives in jp-shared and BOTH apps load it directly.
