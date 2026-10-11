@@ -115,12 +115,31 @@ cd ../jp-backend/JP.Sso.Api && dotnet run
 
 ## Screens
 
+**Auth**
+
 - Sign in, and teacher signup (single-purpose — no user-type toggle)
 - Forgot password, reset password, OTP verification
-- Teacher shell
+
+**The portal** (17 routed screens as of 6C-2, 1 still a placeholder)
+
+| Route | What it is |
+|---|---|
+| `/dashboard` | Where things stand, from real counts |
+| `/profile` | The profile, and the completeness that decides findability |
+| `/jobs`, `/jobs/:jobId` | Browse and apply. **Applying is free** — the school pays to post, never the teacher to apply |
+| `/applications`, `/applications/:applicationId` | What was applied to, in the teacher's own wording |
+| `/saved-jobs` | Saved, not applied |
+| `/offers` | Offers received, accept or decline |
+| `/invitations` | 🔒 Schools that asked. Accepting is the SECOND and final consent path |
+| `/notifications` | The full list. The same shared component the school portal routes at |
+| `/account/documents` | ⬜ Routed, still `comingSoon` |
+
+> 🔴 **Verification is soft, and that is a locked stance** (decision 2.9). An
+> unverified teacher can browse, apply and be hired. The badge is a signal, not
+> a gate, and nothing on these screens may turn it into one.
 
 ⚠️ Teachers are mostly on phones. 375px is the primary experience here, not a
-responsive afterthought.
+responsive afterthought — and every screen suite shoots it.
 
 ---
 

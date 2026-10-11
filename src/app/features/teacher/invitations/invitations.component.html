@@ -1,0 +1,207 @@
+<div class="page enter">
+  <header class="page__header">
+    <div class="page__heading">
+      <h1 class="page__title">Invitations</h1>
+      <p class="page__description">
+        Schools that found your profile and would like you to apply.
+        <!--
+          🔒 The product's own rule, said to the person it protects. A teacher
+          who knows a school cannot reach them until they say so reads this
+          inbox differently — and that is the point of 2.56 existing at all.
+        -->
+        A school can only contact you directly once you accept, or once you
+        apply to one of their jobs.
+      </p>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <p class="table__loading">Loading …</p>
+  } @else if (failed()) {
+    <!--
+      🔴 A FAILED LOAD IS NOT AN EMPTY INBOX. "No school has invited you" is a
+      sentence about this person's standing in the market; showing it when the
+      truth is a dropped request is unkind as well as wrong.
+    -->
+    <p class="note" role="alert">
+      Your invitations could not be loaded. Nothing has been missed — try again
+      in a moment.
+    </p>
+  } @else if (rows().length === 0) {
+    <ui-empty-state
+      icon="✉️"
+      title="No invitations yet"
+      message="Schools search by subject, experience and location. Adding a subject and finishing your profile is what makes you findable — most schools filter on both."
+      actionLabel="Finish my profile"
+      actionLink="/profile"
+    />
+  } @else {
+    @if (open().length > 0) {
+      <section class="invites__group">
+        <h2 class="invites__group-title">Waiting for your answer</h2>
+
+        <ul class="invites">
+          @for (row of open(); track row.inviteId) {
+            <li class="card invites__item">
+              <div class="invites__head">
+                <h3 class="invites__school">
+                  {{ row.schoolName }}
+
+                  <!--
+                    ⚠️ tone=, not variant= — ui-badge's input is `tone`, and a
+                    bare variant="…" compiles happily and renders grey. G30's
+                    shape; it cost the school screen a silent neutral badge.
+                  -->
+                  @if (row.isSchoolVerified) {
+                    <ui-badge tone="success" size="sm">Verified school</ui-badge>
+                  }
+                </h3>
+
+                <ui-badge [tone]="tone(row.inviteStatusId)" size="sm">
+                  {{ row.inviteStatusName }}
+                </ui-badge>
+              </div>
+
+              <p class="invites__line">
+                {{ row.branchName }}
+                <!--
+                  ⚠️ A job is OPTIONAL on an invitation, and its absence is the
+                  point of the feature: "we would like to talk to you" is a real
+                  thing for a school to say.
+                -->
+                @if (row.jobTitle) {
+                  · for <strong>{{ row.jobTitle }}</strong>
+                } @else {
+                  · no particular posting
+                }
+              </p>
+
+              @if (salary(row); as pay) {
+                <p class="invites__line invites__line--muted">{{ pay }}</p>
+              }
+
+              @if (row.message) {
+                <!--
+                  The school's own words. Shown as written, because a school that
+                  took the trouble to write something deserves to have it read.
+                -->
+                <blockquote class="invites__message">{{ row.message }}</blockquote>
+              }
+
+              <p class="invites__line invites__line--muted">
+                Sent {{ row.sentOn | date: 'd MMM y' }}
+              </p>
+
+              @if (replyingTo() === row.inviteId) {
+                <label class="form-label" [attr.for]="'reply-' + row.inviteId">
+                  A line back to them (optional)
+                </label>
+                <textarea
+                  class="form-control"
+                  [id]="'reply-' + row.inviteId"
+                  rows="3"
+                  maxlength="1000"
+                  placeholder="Anything you want them to know."
+                  [(ngModel)]="remarks"
+                  [name]="'remarks-' + row.inviteId"
+                ></textarea>
+              }
+
+              <div class="invites__actions">
+                @if (jobLink(row)) {
+                  <button type="button" class="btn btn--sm" (click)="openJob(row)">
+                    See the job
+                  </button>
+                }
+
+                <button type="button" class="btn btn--sm" (click)="toggleReply(row.inviteId)">
+                  {{ replyingTo() === row.inviteId ? 'Hide reply' : 'Add a reply' }}
+                </button>
+
+                <!--
+                  🔒 THE CONSENT. Its confirmation names what the school gets,
+                  in the words a teacher cares about — see the component.
+                -->
+                <button
+                  type="button"
+                  class="btn btn--primary btn--sm"
+                  [disabled]="answering() !== null"
+                  (click)="accept(row)"
+                >
+                  {{ answering() === row.inviteId ? 'Saving …' : 'Accept' }}
+                </button>
+
+                <!--
+                  ⚠️ No confirmation on declining. It grants nothing and costs
+                  nothing, and a dialog in front of "no thanks" is friction for
+                  its own sake.
+                -->
+                <button
+                  type="button"
+                  class="btn btn--sm"
+                  [disabled]="answering() !== null"
+                  (click)="decline(row)"
+                >
+                  Not interested
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (answered().length > 0) {
+      <section class="invites__group">
+        <h2 class="invites__group-title">Already answered</h2>
+
+        <ul class="invites">
+          @for (row of answered(); track row.inviteId) {
+            <li class="card invites__item invites__item--past">
+              <div class="invites__head">
+                <h3 class="invites__school">{{ row.schoolName }}</h3>
+
+                <!--
+                  🔴 THE TEACHER'S OWN WORDING, from the row. The master holds
+                  the school's vocabulary — "Ignored" — and this app never asks
+                  for it (5B's lesson: a filter must not say "Rejected" above a
+                  row that says "Not selected").
+                -->
+                <ui-badge [tone]="tone(row.inviteStatusId)" size="sm">
+                  {{ row.inviteStatusName }}
+                </ui-badge>
+              </div>
+
+              <p class="invites__line invites__line--muted">
+                @if (row.jobTitle) {
+                  {{ row.jobTitle }} ·
+                }
+                {{ row.respondedOn ? ('answered ' + (row.respondedOn | date: 'd MMM y')) : '' }}
+              </p>
+
+              <!--
+                🔒 AND NOTHING THAT LOOKS LIKE A REWARD.
+
+                An accepted invitation gets the same quiet row as a declined
+                one. The teacher agreed to be contacted — a fact worth showing,
+                not an achievement to celebrate, and certainly not an "unlocked"
+                state that would make consent feel like a transaction.
+              -->
+              @if (row.inviteStatusId === STATUS.accepted) {
+                <p class="invites__line invites__line--muted">
+                  They can contact you about this.
+                </p>
+              }
+
+              @if (row.teacherRemarks) {
+                <p class="invites__line invites__line--muted">
+                  You said: “{{ row.teacherRemarks }}”
+                </p>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  }
+</div>

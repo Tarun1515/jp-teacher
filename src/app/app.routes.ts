@@ -167,9 +167,64 @@ export const routes: Routes = [
           ),
         data: { title: 'Saved jobs' },
       },
-      { path: 'invitations', loadComponent: comingSoon, data: { title: 'Invitations' } },
+      /*
+        Phase 6C-2 — 🔒 invitations, and the teacher's half of consent path 2.
+
+        ⚠️ No permission guard and none needed: a teacher reads their own
+        invitations, and the server matches every one on the caller's own
+        UserUid. Another teacher's invitation id answers NOT_FOUND (2.6), so
+        there is no id to probe with.
+      */
+      /*
+        Phase 6C-2 — the teacher's offers.
+
+        🔴 THE MENU ROW ARRIVES IN THE SAME COMMIT (2.37, and this file's own
+        header): TEACHER_OFFERS -> /offers, DisplayOrder 45, no permission,
+        seeded in 005_seed_menus.sql. A row pointing at a missing route is a 404
+        in every teacher's sidebar; a route with no row is invisible — and until
+        now offers were exactly that second case. They have existed since 6A and
+        a teacher could answer one over HTTP with no way to FIND one.
+
+        ⚠️ No permission guard, and none could apply: an offer belongs to the
+        teacher it was sent to, and the server matches every read on the
+        caller's own UserUid. Another teacher's offer id answers NOT_FOUND (2.6).
+      */
+      {
+        path: 'offers',
+        loadComponent: () =>
+          import('./features/teacher/offers/my-offers.component').then(
+            (m) => m.MyOffersComponent,
+          ),
+        data: { title: 'My offers' },
+      },
+      {
+        path: 'invitations',
+        loadComponent: () =>
+          import('./features/teacher/invitations/invitations.component').then(
+            (m) => m.InvitationsComponent,
+          ),
+        data: { title: 'Invitations' },
+      },
       { path: 'documents', loadComponent: comingSoon, data: { title: 'Documents' } },
-      { path: 'notifications', loadComponent: comingSoon, data: { title: 'Notifications' } },
+      /*
+        Phase 6C-2 — the notification page both portals route AT.
+
+        🔴 The component lives in jp-shared and BOTH apps load it directly.
+        The screen is identical by nature: a person's own notifications, newest
+        first. Wrapping it per app would be the place two copies start to
+        disagree (G27), and there is nothing portal-specific to wrap.
+
+        ⚠️ No permission guard and none possible: a notification is addressed to
+        a person, not granted by a role, and the server reads the caller's uid
+        from their token. The seeded menu row carries no PermissionCode for the
+        same reason.
+      */
+      {
+        path: 'notifications',
+        loadComponent: () =>
+          import('jp-shared/ui').then((m) => m.UiNotificationListComponent),
+        data: { title: 'Notifications' },
+      },
     ],
   },
 

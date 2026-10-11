@@ -1,0 +1,93 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+/*
+  ⚠️ Little here on purpose. The page, the cards, the badges, the note and the
+  empty state all come from the design system — G27's lesson was that a screen
+  writing its own chrome drifts from the other seven. What is left is this
+  inbox's own grouping and the message quote.
+*/
+
+.invites__group + .invites__group {
+  margin-top: v.$space-5;
+}
+
+.invites__group-title {
+  margin: 0 0 v.$space-3;
+  font-size: var(--jp-font-size-sm);
+  font-weight: var(--jp-font-weight-semibold, 600);
+  color: var(--jp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.invites {
+  @include m.flex-column(v.$space-3);
+
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.invites__item {
+  @include m.flex-column(v.$space-2);
+}
+
+/*
+  An answered invitation is quieter, not hidden. The teacher may want to find
+  the school they said yes to three weeks ago.
+*/
+.invites__item--past {
+  background: var(--jp-surface-alt);
+}
+
+.invites__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: v.$space-3;
+  flex-wrap: wrap;
+}
+
+.invites__school {
+  display: flex;
+  align-items: center;
+  gap: v.$space-2;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: var(--jp-font-size-md);
+  font-weight: var(--jp-font-weight-semibold, 600);
+  color: var(--jp-text);
+}
+
+.invites__line {
+  margin: 0;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text);
+
+  &--muted { color: var(--jp-text-muted); }
+}
+
+/*
+  🔴 The school's own words, set apart so they read as a quotation rather than
+  as the product's copy. A school writing "we saw your athletics background" has
+  said something personal, and running it inline with our own sentences would
+  blur who said what.
+*/
+.invites__message {
+  margin: v.$space-1 0;
+  padding: v.$space-2 v.$space-3;
+  border-left: 3px solid var(--jp-border-strong);
+  background: var(--jp-surface-alt);
+  border-radius: var(--jp-radius-sm);
+  color: var(--jp-text);
+  font-size: var(--jp-font-size-sm);
+  line-height: var(--jp-line-height-relaxed);
+}
+
+.invites__actions {
+  display: flex;
+  gap: v.$space-2;
+  flex-wrap: wrap;
+  margin-top: v.$space-1;
+}

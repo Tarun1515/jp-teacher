@@ -1,0 +1,198 @@
+<div class="page enter">
+  <header class="page__header">
+    <div class="page__heading">
+      <h1 class="page__title">My offers</h1>
+      <p class="page__description">
+        Offers schools have made you.
+        <!--
+          🔴 2.73's second step, said before anybody can assume otherwise.
+          Accepting is not arriving, and a teacher who reads it that way may
+          stop looking for work.
+        -->
+        Accepting tells the school; they confirm the hire as a separate step.
+      </p>
+    </div>
+  </header>
+
+  @if (loading()) {
+    <p class="table__loading">Loading …</p>
+  } @else if (failed()) {
+    <!--
+      🔴 "We could not ask" is not "you have no offers". For somebody waiting on
+      one those are very different sentences.
+    -->
+    <p class="note" role="alert">
+      Your offers could not be loaded. Nothing has been missed — try again in a
+      moment.
+    </p>
+  } @else if (rows().length === 0) {
+    <ui-empty-state
+      icon="📄"
+      title="No offers yet"
+      message="An offer comes after a school shortlists and selects you. You can see where each application stands on the applications page."
+      actionLabel="My applications"
+      actionLink="/applications"
+    />
+  } @else {
+    @if (live().length > 0) {
+      <section class="offers__group">
+        <h2 class="offers__group-title">Waiting for your answer</h2>
+
+        <ul class="offers">
+          @for (row of live(); track row.offerId) {
+            <li class="card offers__item">
+              <div class="offers__head">
+                <h3 class="offers__school">{{ row.schoolName }}</h3>
+                <ui-badge [tone]="tone(row.offerStatusId)" size="sm">
+                  {{ row.offerStatusName }}
+                </ui-badge>
+              </div>
+
+              <p class="offers__line">
+                <strong>{{ row.jobTitle }}</strong> · {{ row.branchName }}
+              </p>
+
+              <!-- The terms, as a plain list. This is the document. -->
+              <dl class="offers__terms">
+                @if (salary(row); as pay) {
+                  <div class="offers__term">
+                    <dt>Salary</dt>
+                    <dd>{{ pay }}</dd>
+                  </div>
+                }
+
+                @if (row.joiningDate) {
+                  <div class="offers__term">
+                    <dt>Joining</dt>
+                    <dd>{{ row.joiningDate | date: 'd MMM y' }}</dd>
+                  </div>
+                }
+
+                @if (reportingTime(row.reportingTime); as time) {
+                  <div class="offers__term">
+                    <dt>Reporting time</dt>
+                    <dd>{{ time }}</dd>
+                  </div>
+                }
+
+                <div class="offers__term">
+                  <dt>Sent</dt>
+                  <dd>{{ row.sentOn | date: 'd MMM y' }}</dd>
+                </div>
+              </dl>
+
+              @if (row.termsAndConditions) {
+                <details class="offers__details">
+                  <summary>Terms from the school</summary>
+                  <p class="offers__terms-text">{{ row.termsAndConditions }}</p>
+                </details>
+              }
+
+              @if (replyingTo() === row.offerId) {
+                <label class="form-label" [attr.for]="'offer-reply-' + row.offerId">
+                  A line back to them (optional)
+                </label>
+                <textarea
+                  class="form-control"
+                  [id]="'offer-reply-' + row.offerId"
+                  rows="3"
+                  maxlength="1000"
+                  placeholder="Anything you want them to know."
+                  [(ngModel)]="remarks"
+                  [name]="'offer-remarks-' + row.offerId"
+                ></textarea>
+              }
+
+              <div class="offers__actions">
+                <button type="button" class="btn btn--sm" (click)="toggleReply(row.offerId)">
+                  {{ replyingTo() === row.offerId ? 'Hide reply' : 'Add a reply' }}
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn--primary btn--sm"
+                  [disabled]="answering() !== null"
+                  (click)="accept(row)"
+                >
+                  {{ answering() === row.offerId ? 'Saving …' : 'Accept' }}
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn--sm"
+                  [disabled]="answering() !== null"
+                  (click)="decline(row)"
+                >
+                  Decline
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (past().length > 0) {
+      <section class="offers__group">
+        <h2 class="offers__group-title">Earlier offers</h2>
+
+        <!--
+          ⚠️ The history is shown, not collapsed to the latest. 2.73 allows a
+          school to offer again after a decline, so a teacher may legitimately
+          have three offers on one application — and hiding the earlier ones
+          would hide a negotiation they took part in.
+        -->
+        <ul class="offers">
+          @for (row of past(); track row.offerId) {
+            <li class="card offers__item offers__item--past">
+              <div class="offers__head">
+                <h3 class="offers__school">{{ row.schoolName }}</h3>
+                <ui-badge [tone]="tone(row.offerStatusId)" size="sm">
+                  {{ row.offerStatusName }}
+                </ui-badge>
+              </div>
+
+              <p class="offers__line offers__line--muted">
+                {{ row.jobTitle }}
+                @if (salary(row); as pay) {
+                  · {{ pay }}
+                }
+                @if (row.respondedOn) {
+                  · answered {{ row.respondedOn | date: 'd MMM y' }}
+                }
+              </p>
+
+              <!--
+                🔴 ACCEPTED IS NOT HIRED, and the row says what is outstanding
+                rather than reading like a conclusion (2.73).
+              -->
+              @if (row.offerStatusId === STATUS.accepted) {
+                <p class="offers__line offers__line--muted">
+                  You accepted. The school confirms the hire separately.
+                </p>
+              }
+
+              <!--
+                ⚠️ A WITHDRAWN OFFER CARRIES NO REASON. 018 stores the school's
+                note and never sends it — "we filled the post internally" is not
+                a sentence they chose to say to this teacher — so the screen
+                does not invent one either.
+              -->
+              @if (row.offerStatusId === STATUS.withdrawn) {
+                <p class="offers__line offers__line--muted">
+                  The school withdrew this offer.
+                </p>
+              }
+
+              @if (row.teacherRemarks) {
+                <p class="offers__line offers__line--muted">
+                  You said: “{{ row.teacherRemarks }}”
+                </p>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+  }
+</div>

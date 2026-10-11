@@ -1,0 +1,123 @@
+@use 'variables' as v;
+@use 'mixins' as m;
+
+/*
+  ⚠️ The page, cards, badges, note, form controls and empty state are all the
+  design system's (G27). What is here is this screen's own grouping and the
+  terms list — an offer is a document, so its terms read as a definition list
+  rather than as prose.
+*/
+
+.offers__group + .offers__group {
+  margin-top: v.$space-5;
+}
+
+.offers__group-title {
+  margin: 0 0 v.$space-3;
+  font-size: var(--jp-font-size-sm);
+  font-weight: var(--jp-font-weight-semibold, 600);
+  color: var(--jp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.offers {
+  @include m.flex-column(v.$space-3);
+
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.offers__item {
+  @include m.flex-column(v.$space-2);
+}
+
+/* An answered offer is quieter, not hidden — the history is the point. */
+.offers__item--past {
+  background: var(--jp-surface-alt);
+}
+
+.offers__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: v.$space-3;
+  flex-wrap: wrap;
+}
+
+.offers__school {
+  margin: 0;
+  font-size: var(--jp-font-size-md);
+  font-weight: var(--jp-font-weight-semibold, 600);
+  color: var(--jp-text);
+}
+
+.offers__line {
+  margin: 0;
+  font-size: var(--jp-font-size-sm);
+  color: var(--jp-text);
+
+  &--muted { color: var(--jp-text-muted); }
+}
+
+/*
+  🔴 The terms, as a definition list. An offer has a salary, a joining date and
+  a reporting time in it, and those are facts with labels — running them
+  together as a sentence is how somebody misreads the date.
+
+  ⚠️ Wraps rather than forcing columns, so at 375 each term takes its own line
+  instead of squeezing the value to two characters.
+*/
+.offers__terms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$space-2 v.$space-5;
+  margin: v.$space-1 0 0;
+}
+
+.offers__term {
+  @include m.flex-column(0);
+
+  dt {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--jp-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  dd {
+    margin: 0;
+    font-size: var(--jp-font-size-sm);
+    font-weight: var(--jp-font-weight-medium);
+    color: var(--jp-text);
+  }
+}
+
+.offers__details {
+  margin-top: v.$space-1;
+  font-size: var(--jp-font-size-sm);
+
+  summary {
+    cursor: pointer;
+    color: var(--jp-text-muted);
+  }
+}
+
+.offers__terms-text {
+  margin: v.$space-2 0 0;
+  padding: v.$space-2 v.$space-3;
+  background: var(--jp-surface-alt);
+  border-radius: var(--jp-radius-sm);
+  color: var(--jp-text);
+  line-height: var(--jp-line-height-relaxed);
+  white-space: pre-wrap;
+}
+
+.offers__actions {
+  display: flex;
+  gap: v.$space-2;
+  flex-wrap: wrap;
+  margin-top: v.$space-1;
+}
