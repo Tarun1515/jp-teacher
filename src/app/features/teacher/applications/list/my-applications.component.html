@@ -18,12 +18,12 @@
     <!--
       🔴 A FILTER STRIP, NOT TABS, AND NOT BY ACCIDENT.
 
-      `.tabs` is hand-rolled in three components with three slightly different
-      sets of rules and is not in the design system (G27). Adding a fourth copy
-      would have made that worse, and promoting it in this phase would have
-      leaked properties into screens that deliberately omit them. The strip is
-      already shared, already used by the school's applicant list, and says the
-      same thing.
+      ⚠️ The G27 half of this reason EXPIRED in 6C-0: `.tabs` is in the design
+      system now, so "adding a fourth copy" is no longer what using it would
+      mean. The rest of the reason stands on its own and is why this is still a
+      select — every option carries its own COUNT, which a tab strip has no
+      room for, and the strip is already shared with the school's applicant
+      list. Had the count not mattered, this would now be `.tabs`.
 
       🔴 Every option is a row's OWN teacher-facing word, with its count — so
       the filter can never say "Rejected" above a row that says "Not selected".
