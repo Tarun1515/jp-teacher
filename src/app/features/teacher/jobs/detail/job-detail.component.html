@@ -164,9 +164,19 @@
           they arrived. And not shown once they HAVE applied, because then the
           card below says so and this would contradict it.
         -->
+        <!--
+          ⚠️ GREETS BY NAME WHEN THERE IS ONE, and says the same thing when
+          there is not. The name is a courtesy; the sentence under it is the
+          information, and a failed profile read must not cost the visitor the
+          banner that tells them where they are.
+        -->
         @if (arrivedToApply() && !job.hasApplied) {
           <p class="banner banner--info" role="status">
-            <strong>You were applying for {{ job.jobTitle }}</strong>
+            @if (greetingName()) {
+              <strong>Welcome, {{ greetingName() }} — you were applying for {{ job.jobTitle }}</strong>
+            } @else {
+              <strong>You were applying for {{ job.jobTitle }}</strong>
+            }
             at {{ job.schoolName }}. Nothing has been sent yet — read the details and apply
             below.
           </p>

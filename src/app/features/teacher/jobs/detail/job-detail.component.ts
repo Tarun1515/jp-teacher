@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MasterService, ToastService } from 'jp-shared/core';
+import { TeacherService } from '../../../../core/teacher.service';
 import { Lookup, MASTER_KEYS } from 'jp-shared/models';
 import { UiBadgeComponent, UiEmptyStateComponent } from 'jp-shared/ui';
 
@@ -62,6 +63,7 @@ export class JobDetailComponent {
   private readonly masters = inject(MasterService);
   private readonly toast = inject(ToastService);
   private readonly route = inject(ActivatedRoute);
+  private readonly teachers = inject(TeacherService);
   private readonly router = inject(Router);
 
   protected readonly data = signal<JobForTeacher | null>(null);
@@ -82,6 +84,32 @@ export class JobDetailComponent {
 
   /** True when the route was /jobs/:jobUid/apply — the public funnel's landing. */
   protected readonly arrivedToApply = signal(false);
+
+  /**
+   * The teacher's own name, for the funnel's landing. Phase 7B.
+   *
+   * ---------------------------------------------------------------------------
+   * 🔴 FETCHED ONLY ON THE FUNNEL LANDING, NEVER ON AN ORDINARY JOB PAGE
+   * ---------------------------------------------------------------------------
+   * Greeting by name costs one request to /teacher/profile, and a job page has
+   * no other reason to make it — so it is made only when `arrivedToApply` is
+   * true: once, for somebody who has just created an account and come through
+   * four screens.
+   *
+   * ⚠️ The token cannot supply this. `CurrentUser` carries claims — ids, roles,
+   * permissions, status — and deliberately no name; a display name in a JWT
+   * goes stale the moment somebody corrects their spelling.
+   *
+   * ⚠️ EMPTY IS A VALID STATE and the template falls back to the unnamed
+   * wording. A failed profile read must not cost the visitor the banner that
+   * tells them where they are.
+   *
+   * 🔴 It is also what proves G43 end to end: this name crossed the signup
+   * form, the request contract, the SSO account, the provisioning procedure's
+   * @FullName and the column to get here. For six phases it was collected and
+   * dropped in the browser, so there was nothing to greet with.
+   */
+  protected readonly greetingName = signal('');
 
   protected readonly subjects = signal<Lookup[]>([]);
   protected readonly designations = signal<Lookup[]>([]);
@@ -136,6 +164,18 @@ export class JobDetailComponent {
       redirected deserves to be told where they ended up and why.
     */
     this.arrivedToApply.set(this.route.snapshot.data['arrivedToApply'] === true);
+
+    if (this.arrivedToApply()) {
+      /*
+        ⚠️ Errors swallowed deliberately: the greeting is a courtesy and the
+        banner it decorates is the useful part. A toast about a failed profile
+        read would be the first thing a brand-new account ever saw.
+      */
+      this.teachers.getProfile().subscribe({
+        next: (profile) => this.greetingName.set((profile.fullName ?? '').trim()),
+        error: () => this.greetingName.set(''),
+      });
+    }
 
     this.masters.get(MASTER_KEYS.subject).subscribe((v) => this.subjects.set(v));
     this.masters.get(MASTER_KEYS.designation).subscribe((v) => this.designations.set(v));

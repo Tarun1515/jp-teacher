@@ -119,8 +119,19 @@ export class RegisterComponent {
       return;
     }
 
-    const { email, mobile, password } = this.form.getRawValue();
-    const payload = { email: email.trim().toLowerCase(), mobile: mobile || null, password };
+    const { name, email, mobile, password } = this.form.getRawValue();
+
+    /*
+      ⚠️ 'name' IS IN THE PAYLOAD NOW (G43). This destructure took three of the
+      four fields for six phases, so the required name field was collected and
+      discarded here — one line from the request that would have carried it.
+    */
+    const payload = {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      mobile: mobile || null,
+      password,
+    };
 
     this.submitting.set(true);
 
