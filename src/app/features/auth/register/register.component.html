@@ -1,6 +1,10 @@
 <ui-auth-shell
   title="Create your teacher account"
-  subtitle="Find jobs at verified schools near you. It takes about a minute."
+  [subtitle]="
+    continuing
+      ? 'Create your account and we will take you straight back to that job. It takes about a minute.'
+      : 'Find jobs at verified schools near you. It takes about a minute.'
+  "
   boardNote="For teachers"
 >
   <form [formGroup]="form" (ngSubmit)="submit()" novalidate>

@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { APPLICATION_STAGES, UiAuthShellComponent, UiPasswordFieldComponent, UiRollComponent } from 'jp-shared/ui';
-import { AppAccessService, AuthService, MenuService, ToastService } from 'jp-shared/core';
+import { AppAccessService, AuthService, MenuService, ReturnUrlService, ToastService } from 'jp-shared/core';
 import { applyServerErrors, clearServerError, fieldError, revealErrors } from 'jp-shared/models';
 
 /**
@@ -31,6 +31,41 @@ export class LoginComponent {
   private readonly access = inject(AppAccessService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly returnUrls = inject(ReturnUrlService);
+
+  /**
+   * 🔴 CAPTURED ON CONSTRUCTION, NOT READ AT SUBMIT TIME (7B-0).
+   *
+   * By the time the sign-in succeeds the app may have navigated — and on the
+   * register -> "sign in to continue" path this screen is reached WITHOUT the
+   * parameter, because the destination was captured a screen earlier. Reading
+   * the URL at submit time would find nothing there and land on the dashboard.
+   *
+   * ⚠️ `capture` refuses anything that is not an app-relative path, so a
+   * crafted ?returnUrl=https://evil.example stores nothing and this signs in
+   * exactly as it did before. It is not an error and says nothing to the
+   * visitor — a message naming the rule helps only whoever was probing it.
+   */
+  private readonly captured = this.returnUrls.capture(
+    this.route.snapshot.queryParamMap.get('returnUrl'),
+  );
+
+
+  /**
+   * True when this visit has somewhere to go afterwards.
+   *
+   * ⚠️ USED, not merely captured. Three things send somebody to this screen
+   * with a destination already in mind — the auth guard, the session-expiry
+   * interceptor, and the public site's Apply button — and saying so is the
+   * difference between a funnel and a detour.
+   *
+   * 🔒 It is a BOOLEAN, never the path itself. Rendering the destination
+   * would put an attacker-supplied string on the page: refused values never
+   * reach here, but "the validator stopped it" is a poor reason to put
+   * somebody else's text in our markup when a yes/no does the job.
+   */
+  protected readonly continuing = this.captured !== null;
 
   /** Drawn on the panel beside the form — the same roll the app itself uses. */
   protected readonly pipeline = APPLICATION_STAGES;
@@ -98,7 +133,22 @@ export class LoginComponent {
           return;
         }
 
-        void this.router.navigate([this.auth.homeRoute()]);
+        /*
+          🔴 WHERE WERE THEY HEADED? (7B-0)
+
+          Three things send somebody here with a destination already in mind:
+          the auth guard (a bookmarked page behind a login), the session-expiry
+          interceptor (halfway through something), and the public website's
+          Apply button. All three put it in ?returnUrl=, all three were ignored
+          until now — the guard's own comment claimed otherwise.
+
+          🔒 ReturnUrlService validates it as an app-relative path and refuses
+          anything that could leave this origin. An absolute URL is dropped and
+          this lands on the home route, which is what it did before.
+        */
+        const pending = this.returnUrls.consume();
+
+        void this.router.navigateByUrl(pending ?? this.auth.homeRoute());
       },
       error: (error: unknown) => {
         this.submitting.set(false);

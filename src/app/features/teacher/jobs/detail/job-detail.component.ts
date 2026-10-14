@@ -80,6 +80,9 @@ export class JobDetailComponent {
    */
   protected readonly refusal = signal<string | null>(null);
 
+  /** True when the route was /jobs/:jobUid/apply — the public funnel's landing. */
+  protected readonly arrivedToApply = signal(false);
+
   protected readonly subjects = signal<Lookup[]>([]);
   protected readonly designations = signal<Lookup[]>([]);
   protected readonly qualifications = signal<Lookup[]>([]);
@@ -89,7 +92,31 @@ export class JobDetailComponent {
   protected readonly states = signal<Lookup[]>([]);
 
   constructor() {
+    /*
+      🔴 TWO ROUTE SHAPES REACH THIS COMPONENT (7B-0):
+
+          /jobs/:jobId        an integer — every link inside this app
+          /jobs/:jobUid/apply a uid     — the public website's Apply button
+
+      The second exists because the public surface exposes no integer job id
+      (2.47). Both load the same screen because it IS the same screen: the job,
+      with the apply control beside it. A separate "apply page" would have been
+      a second copy of this template that drifts from it.
+
+      ⚠️ The uid branch is checked FIRST. Reading jobId first and falling back
+      would mean Number(null) -> NaN on the uid route, which takes the
+      not-found branch below — the funnel would land on "this posting has gone"
+      for a job that is live.
+    */
     this.route.paramMap.subscribe((params) => {
+      const uid = params.get('jobUid');
+
+      if (uid) {
+        this.loadByUid(uid);
+
+        return;
+      }
+
       const id = Number(params.get('jobId'));
 
       if (!Number.isFinite(id) || id <= 0) {
@@ -102,6 +129,14 @@ export class JobDetailComponent {
       this.load(id);
     });
 
+    /*
+      Arriving through the funnel rather than from inside the app. Set from
+      route data so the template can say which job they were applying for —
+      somebody who has just created an account, verified a code and been
+      redirected deserves to be told where they ended up and why.
+    */
+    this.arrivedToApply.set(this.route.snapshot.data['arrivedToApply'] === true);
+
     this.masters.get(MASTER_KEYS.subject).subscribe((v) => this.subjects.set(v));
     this.masters.get(MASTER_KEYS.designation).subscribe((v) => this.designations.set(v));
     this.masters.get(MASTER_KEYS.qualification).subscribe((v) => this.qualifications.set(v));
@@ -109,6 +144,31 @@ export class JobDetailComponent {
     this.masters.get(MASTER_KEYS.classLevel).subscribe((v) => this.classLevels.set(v));
     this.masters.get(MASTER_KEYS.city).subscribe((v) => this.cities.set(v));
     this.masters.get(MASTER_KEYS.state).subscribe((v) => this.states.set(v));
+  }
+
+  /**
+   * The funnel's entry point. Phase 7B-0.
+   *
+   * ⚠️ Identical handling to `load` below, deliberately — including the error
+   * branch. A uid that names a draft, an expired job or nothing at all gets
+   * the same "this posting has gone" a bad integer gets, because the server
+   * gives the same 404 for all of them and this screen has no more to say.
+   */
+  protected loadByUid(jobUid: string): void {
+    this.loading.set(true);
+    this.notFound.set(false);
+    this.refusal.set(null);
+
+    this.jobs.getByUid(jobUid).subscribe({
+      next: (job) => {
+        this.data.set(job);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.notFound.set(true);
+        this.loading.set(false);
+      },
+    });
   }
 
   protected load(jobId: number): void {

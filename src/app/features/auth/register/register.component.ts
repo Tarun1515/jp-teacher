@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
-import { AppAccessService, AuthService, MenuService, ToastService } from 'jp-shared/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { AppAccessService, AuthService, MenuService, ReturnUrlService, ToastService } from 'jp-shared/core';
 import { applyServerErrors, clearServerError, fieldError, revealErrors } from 'jp-shared/models';
 import { APPLICATION_STAGES, UiAuthShellComponent, UiPasswordFieldComponent, UiRollComponent } from 'jp-shared/ui';
 
@@ -39,6 +39,34 @@ export class RegisterComponent {
   private readonly access = inject(AppAccessService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly returnUrls = inject(ReturnUrlService);
+
+  /**
+   * 🔴 THE FUNNEL'S DESTINATION, CAPTURED AT THE DOOR (7B-0, G41).
+   *
+   * The public website's Apply button sends somebody here as
+   * /auth/register?returnUrl=/jobs/<uid>/apply. Captured on construction and
+   * stored, because this screen is not where it gets used: registration signs
+   * them in behind the scenes, and on the failure branch it hands them to the
+   * login screen — which has no parameter in its URL. Stored once, it survives
+   * both paths.
+   *
+   * 🔒 Validated as an app-relative path by ReturnUrlService; an absolute URL
+   * stores nothing and registration proceeds exactly as before.
+   */
+  private readonly captured = this.returnUrls.capture(
+    this.route.snapshot.queryParamMap.get('returnUrl'),
+  );
+
+  /**
+   * True when they came here on their way to something.
+   *
+   * ⚠️ A BOOLEAN, never the path. See the note on the login screen's copy of
+   * this — the validator refuses anything hostile, but a yes/no does the job
+   * and keeps an attacker-supplied string out of our markup entirely.
+   */
+  protected readonly continuing = this.captured !== null;
 
   protected readonly pipeline = APPLICATION_STAGES;
 
@@ -110,13 +138,27 @@ export class RegisterComponent {
               return;
             }
 
-            void this.router.navigate([this.auth.homeRoute()]);
+            /*
+              🔴 THE PUBLIC SITE'S FUNNEL ENDS HERE (7B-0, G41). Somebody who
+              pressed Apply on a job lands on that job's apply screen rather
+              than on a dashboard that says nothing about why they signed up.
+            */
+            const pending = this.returnUrls.consume();
+
+            void this.router.navigateByUrl(pending ?? this.auth.homeRoute());
           },
           error: () => {
             // The account exists; only the convenience sign-in failed. Say
             // exactly that rather than implying the registration did not work.
             this.submitting.set(false);
             this.toast.success('Account created. Sign in to continue.');
+
+            /*
+              ⚠️ The destination is NOT consumed here. They still have to sign
+              in, and the login screen will consume it — so the job they were
+              applying for survives this detour instead of being thrown away by
+              the one branch that fails.
+            */
             void this.router.navigate(['/auth/login']);
           },
         });

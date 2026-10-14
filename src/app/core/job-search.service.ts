@@ -295,6 +295,25 @@ export class JobSearchService {
   }
 
   /**
+   * The same posting, by uid. Phase 7B-0.
+   *
+   * 🔴 THE PUBLIC WEBSITE CANNOT NAME A JOB ANY OTHER WAY. Its surface exposes
+   * only uids by design (2.47), and public-contract.mjs's key allowlist FAILS
+   * on a `"jobId"` key — so when somebody presses Apply out there, a uid is
+   * what arrives here.
+   *
+   * ⚠️ The same endpoint rule applies: a draft, expired, closed or deleted job
+   * answers 404 on this route exactly as on the id one, because the server
+   * resolves the uid INSIDE the procedure and then applies the identical WHERE
+   * clause. There is no second definition of "a job a teacher may open".
+   */
+  getByUid(jobUid: string): Observable<JobForTeacher> {
+    return this.http
+      .get<ApiResponse<JobForTeacher>>(`${this.jobsUrl}/${jobUid}`)
+      .pipe(map((r) => r.data as JobForTeacher));
+  }
+
+  /**
    * Save or unsave — the teacher's own private shortlist.
    *
    * 🔴 SAVING IS NOT APPLYING, AND IT UNLOCKS NOTHING. The school is told

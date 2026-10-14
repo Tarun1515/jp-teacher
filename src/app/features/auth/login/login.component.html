@@ -1,6 +1,10 @@
 <ui-auth-shell
   title="Sign in"
-  subtitle="Use the email or mobile number you registered with."
+  [subtitle]="
+    continuing
+      ? 'Sign in and we will take you back to what you were doing.'
+      : 'Use the email or mobile number you registered with.'
+  "
   boardNote="For teachers"
 >
   <!--

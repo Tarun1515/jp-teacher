@@ -151,6 +151,27 @@
         RIGHT — applying
       ===================================================================-->
       <aside class="job__side">
+        <!--
+          🔴 THE FUNNEL'S LANDING SAYS WHERE YOU ARE (7B-0).
+
+          Somebody who read this job on the public site, pressed Apply, created
+          an account and verified a code has been through four screens. Landing
+          silently on a job page leaves them wondering whether the application
+          already happened — so the page names the job and says plainly that
+          nothing has been sent yet.
+
+          ⚠️ Not shown when they got here from inside the app; they know how
+          they arrived. And not shown once they HAVE applied, because then the
+          card below says so and this would contradict it.
+        -->
+        @if (arrivedToApply() && !job.hasApplied) {
+          <p class="banner banner--info" role="status">
+            <strong>You were applying for {{ job.jobTitle }}</strong>
+            at {{ job.schoolName }}. Nothing has been sent yet — read the details and apply
+            below.
+          </p>
+        }
+
         <section class="card">
           <div class="card__header">
             <h2 class="card__title">Apply</h2>

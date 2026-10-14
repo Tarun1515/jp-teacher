@@ -143,6 +143,32 @@ export const routes: Routes = [
           ),
         data: { title: 'Job' },
       },
+
+      /*
+        🔴 THE PUBLIC WEBSITE'S FUNNEL LANDS HERE (7B-0, G41).
+
+        Somebody reads a job on staffroom.in, presses Apply, creates an account,
+        and arrives at this route holding the job's UID — because the public
+        surface exposes no integer job id (2.47) and public-contract.mjs's key
+        allowlist fails on a "jobId" key.
+
+        ⚠️ Declared AFTER 'jobs/:jobId' and it does not shadow it: the paths
+        have different segment counts, so Angular cannot confuse them. The
+        component reads 'jobUid' before 'jobId' for the same reason.
+
+        ⚠️ Same component, because it is the same screen — the job with its
+        apply control. 'arrivedToApply' only changes what the page SAYS, so
+        that somebody who has just signed up is told which job they are looking
+        at and why they are here.
+      */
+      {
+        path: 'jobs/:jobUid/apply',
+        loadComponent: () =>
+          import('./features/teacher/jobs/detail/job-detail.component').then(
+            (m) => m.JobDetailComponent,
+          ),
+        data: { title: 'Apply', arrivedToApply: true },
+      },
       {
         path: 'applications',
         loadComponent: () =>
