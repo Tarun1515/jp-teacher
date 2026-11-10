@@ -20,19 +20,39 @@
     no deployment.
   -->
   <div class="page__toolbar" style="--jp-enter-index: 1">
+    <!--
+      🔴 SR-3 (G27): SUBJECT AND STATE ARE COMBOBOXES, EMPLOYMENT TYPE IS NOT.
+
+      Subjects run to dozens of rows and the state list is about to be every
+      state in India. Employment type is four rows — a search box over it would
+      be a worse control than the list itself, which is exactly what the
+      component's `searchFrom` threshold encodes.
+
+      ⚠️ `ariaLabel`, NOT a visually-hidden <label>. The combobox owns its own
+      id, so an outside <label for> cannot reach it; dropping the label without
+      passing the name would leave a screen reader announcing "combobox" and
+      nothing more.
+    -->
     <div class="page__toolbar__control">
-      <label class="visually-hidden" for="filter-subject">Subject</label>
-      <select
-        class="form-control"
-        id="filter-subject"
-        [ngModel]="subjectId()"
-        (ngModelChange)="subjectId.set($event); onFilterChange()"
-      >
-        <option [ngValue]="null">All subjects</option>
-        @for (s of subjects(); track s.id) {
-          <option [ngValue]="s.id">{{ s.name }}</option>
-        }
-      </select>
+      <ui-multi-select
+        ariaLabel="Subjects"
+        itemNoun="subject"
+        placeholder="All subjects"
+        [options]="subjectOptions()"
+        [ngModel]="subjectIds()"
+        (ngModelChange)="onSubjectsChange($event)"
+      />
+    </div>
+
+    <div class="page__toolbar__control">
+      <ui-multi-select
+        ariaLabel="Class levels"
+        itemNoun="class level"
+        placeholder="Any class level"
+        [options]="classLevelOptions()"
+        [ngModel]="classLevelIds()"
+        (ngModelChange)="onClassLevelsChange($event)"
+      />
     </div>
 
     <div class="page__toolbar__control">
@@ -51,18 +71,13 @@
     </div>
 
     <div class="page__toolbar__control">
-      <label class="visually-hidden" for="filter-state">State</label>
-      <select
-        class="form-control"
-        id="filter-state"
+      <ui-combobox
+        ariaLabel="State"
+        placeholderOption="Anywhere"
+        [options]="stateOptions()"
         [ngModel]="stateId()"
         (ngModelChange)="stateId.set($event); onFilterChange()"
-      >
-        <option [ngValue]="null">Anywhere</option>
-        @for (s of states(); track s.id) {
-          <option [ngValue]="s.id">{{ s.name }}</option>
-        }
-      </select>
+      />
     </div>
 
     @if (hasFilters()) {
@@ -73,6 +88,30 @@
       >Clear</button>
     }
   </div>
+
+  <!--
+    🔴 SR-3: THE LIST SAYS WHOSE FILTERS THESE ARE.
+
+    The subject and state boxes above arrive already set, from the teacher's
+    own profile. Without this line that is a silent lie by omission: a short
+    list the person did not ask for reads as "there is barely any work for me"
+    and nothing on screen says otherwise. The sentence plus one button is what
+    makes a helpful default honest instead of a trap.
+
+    ⚠️ THE WAY OUT IS ONE CLICK AND IT IS NAMED. Not "clear filters" — which
+    asks the teacher to understand that filters they never set exist — but
+    "Show all jobs", which says what will happen.
+  -->
+  @if (matchedToProfile()) {
+    <p class="note jobs__scope" style="--jp-enter-index: 2">
+      <span>Showing jobs that match your profile — your subjects, the classes you teach, and where you want to work.</span>
+      <button type="button" class="btn btn--ghost btn--sm" (click)="showAll()">Show all jobs</button>
+    </p>
+  } @else if (widenedAfterNoMatch()) {
+    <p class="note jobs__scope" style="--jp-enter-index: 2">
+      <span>Nothing open matches your profile just yet, so this is every job that is open.</span>
+    </p>
+  }
 
   @if (loading()) {
     <p class="table__loading">Loading jobs …</p>

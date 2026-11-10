@@ -50,6 +50,23 @@ export interface JobBrowseFilter {
   minSalary?: number | null;
   pageNumber?: number;
   pageSize?: number;
+
+  /**
+   * SR-5. The teacher's subjects, plural.
+   *
+   * 🔴 A teacher of maths and physics has two, and `subjectId` can carry one.
+   * The client asked that the list open already matching THEIR subjects, so the
+   * set is what the screen sends; `subjectId` stays for anything that filters
+   * by a single subject.
+   *
+   * ⚠️ Sent as REPEATED query parameters — `?subjectIds=3&subjectIds=7` — which
+   * is what the server's array binding reads. A comma-joined string would
+   * arrive as one unparseable value and the filter would silently do nothing.
+   */
+  subjectIds?: number[];
+
+  /** SR-5. The teacher's class levels, plural. See `subjectIds`. */
+  classLevelIds?: number[];
 }
 
 export interface JobBrowseItem {
@@ -274,6 +291,17 @@ export class JobSearchService {
     set('minSalary', filter.minSalary);
     set('pageNumber', filter.pageNumber);
     set('pageSize', filter.pageSize);
+
+    /*
+      ⚠️ `append`, NOT `set` — set would keep only the last id. Repeated keys
+      are what the server's array binder reads.
+    */
+    const appendAll = (key: string, values: number[] | undefined) => {
+      for (const value of values ?? []) params = params.append(key, value);
+    };
+
+    appendAll('subjectIds', filter.subjectIds);
+    appendAll('classLevelIds', filter.classLevelIds);
 
     return this.http
       .get<ApiResponse<JobBrowseItem[]>>(this.jobsUrl, { params })

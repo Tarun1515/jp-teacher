@@ -90,6 +90,15 @@
             <span class="field__helper">Schools never see this. It is only used to confirm who you are.</span>
           </div>
 
+          <!--
+            ⚠️ SR-3 (G27): THIS ONE STAYS A PLAIN <select>, DELIBERATELY.
+
+            Gender is a three-row master with "Prefer not to say" as its empty
+            option. A search box over three options is a worse control than the
+            three options — which is exactly what <ui-combobox>'s `searchFrom`
+            threshold of 8 encodes. The combobox is for the lists you cannot
+            scan, not for every dropdown.
+          -->
           <div class="field">
             <label class="field__label" for="genderId">
               Gender <span class="field__optional">Optional</span>
@@ -183,30 +192,42 @@
 
       <div class="card__body">
         <div class="form-grid">
-          <div class="field">
-            <label class="field__label" for="qualificationId">Highest qualification</label>
-            <select class="form-control" id="qualificationId"
-                    [ngModel]="value('qualificationId')"
-                    (ngModelChange)="set('qualificationId', $event, 'qualifications')">
-              <option [ngValue]="null">Choose…</option>
-              @for (item of qualificationOptions(); track item.id) {
-                <option [ngValue]="item.id">{{ item.name }}</option>
-              }
-            </select>
-          </div>
+          <!--
+            🔴 SR-3 (G27): THESE TWO ARE COMBOBOXES, NOT PLAIN SELECTS.
 
-          <div class="field">
-            <label class="field__label" for="designationId">What you are hired as</label>
-            <select class="form-control" id="designationId"
-                    [ngModel]="value('designationId')"
-                    (ngModelChange)="set('designationId', $event, 'qualifications')">
-              <option [ngValue]="null">Choose…</option>
-              @for (item of designationOptions(); track item.id) {
-                <option [ngValue]="item.id">{{ item.name }}</option>
-              }
-            </select>
-            <span class="field__helper">PGT, TGT, PRT — whatever your post is called.</span>
-          </div>
+            The qualification and designation masters both run long enough that
+            a native <select> is a list you can only use if you already know
+            where your own answer falls alphabetically. These are also the two
+            fields the subtitle above says schools filter on harder than
+            anything else on the page — so a control somebody gives up on
+            costs the teacher the search they would have appeared in.
+
+            ⚠️ THE HAND-WRITTEN WRAPPER IS GONE, NOT DUPLICATED. <ui-combobox>
+            renders its own .field, <label>, helper and error, so the old
+            <div class="field">, <label class="field__label"> and the helper
+            <span> are deleted rather than left wrapped around it. It prints
+            "Optional" itself when [required] is absent — which these two are,
+            because nothing on this screen refuses to save without them.
+
+            ⚠️ IT STILL COMMITS AN ID OR NULL, exactly as <option [ngValue]="null">
+            did. It is not free text.
+          -->
+          <ui-combobox
+            label="Highest qualification"
+            placeholderOption="Choose…"
+            [options]="qualificationOptions()"
+            [ngModel]="value('qualificationId')"
+            (ngModelChange)="set('qualificationId', $event, 'qualifications')"
+          />
+
+          <ui-combobox
+            label="What you are hired as"
+            placeholderOption="Choose…"
+            helper="PGT, TGT, PRT — whatever your post is called."
+            [options]="designationOptions()"
+            [ngModel]="value('designationId')"
+            (ngModelChange)="set('designationId', $event, 'qualifications')"
+          />
 
           <div class="field form-grid__full">
             <label class="field__label" for="highestQualificationText">
@@ -331,6 +352,14 @@
                 <li class="languages__row">
                   <span class="languages__name">{{ languageName(languageId) }}</span>
 
+                  <!--
+                    ⚠️ SR-3 (G27): A PLAIN <select>, AND IT SHOULD STAY ONE.
+
+                    Four fixed levels — basic, conversational, fluent, native
+                    (2.51). Not a master, not long, and not scrollable. A
+                    combobox here would put a search box in front of four
+                    words, on a narrow control that repeats once per language.
+                  -->
                   <select
                     class="form-control form-control--sm languages__level"
                     [attr.aria-label]="'How well you speak ' + languageName(languageId)"
@@ -511,19 +540,23 @@
                    (ngModelChange)="set('currentSchool', $event, 'salary')" />
           </div>
 
-          <div class="field">
-            <label class="field__label" for="currentStateId">
-              Where you live <span class="field__optional">Optional</span>
-            </label>
-            <select class="form-control" id="currentStateId"
-                    [ngModel]="value('currentStateId')"
-                    (ngModelChange)="set('currentStateId', $event, 'salary')">
-              <option [ngValue]="null">Choose…</option>
-              @for (item of states(); track item.id) {
-                <option [ngValue]="item.id">{{ item.name }}</option>
-              }
-            </select>
-          </div>
+          <!--
+            🔴 SR-3 (G27): GEOGRAPHY IS A COMBOBOX. The state list is on its
+            way to every state in India (SR-1 seeded Haryana's districts,
+            tehsils and towns first), and scrolling for your own state is the
+            kind of small tax that stops a profile being finished.
+
+            ⚠️ The word "Optional" is NOT written here any more — the combobox
+            prints it itself whenever [required] is absent, and saying it twice
+            is worse than saying it once.
+          -->
+          <ui-combobox
+            label="Where you live"
+            placeholderOption="Choose…"
+            [options]="stateOptions()"
+            [ngModel]="value('currentStateId')"
+            (ngModelChange)="set('currentStateId', $event, 'salary')"
+          />
         </div>
       </div>
 
@@ -670,30 +703,32 @@
              placeholder="Kendriya Vidyalaya, Andheri" />
     </div>
 
-    <div class="form-grid">
-      <div class="field">
-        <label class="field__label" for="expDesignation">
-          Your post <span class="field__optional">Optional</span>
-        </label>
-        <select class="form-control" id="expDesignation" formControlName="designationId">
-          <option [ngValue]="null">Choose…</option>
-          @for (item of designationOptions(); track item.id) {
-            <option [ngValue]="item.id">{{ item.name }}</option>
-          }
-        </select>
-      </div>
+    <!--
+      🔴 SR-3 (G27): DESIGNATION AND SUBJECT ARE COMBOBOXES HERE TOO.
 
-      <div class="field">
-        <label class="field__label" for="expSubject">
-          Main subject <span class="field__optional">Optional</span>
-        </label>
-        <select class="form-control" id="expSubject" formControlName="subjectId">
-          <option [ngValue]="null">Choose…</option>
-          @for (item of subjects(); track item.id) {
-            <option [ngValue]="item.id">{{ item.name }}</option>
-          }
-        </select>
-      </div>
+      Same two long masters as the sections above, and the same reasoning — a
+      teacher filling in four schools should not scroll the subject list four
+      times.
+
+      ⚠️ `formControlName` IS UNCHANGED. <ui-combobox> is a
+      ControlValueAccessor, so the reactive form binds to it exactly as it did
+      to the <select>, and `designationId`/`subjectId` still hold an id or
+      null. Nothing about the form's value semantics moved.
+    -->
+    <div class="form-grid">
+      <ui-combobox
+        label="Your post"
+        placeholderOption="Choose…"
+        [options]="designationOptions()"
+        formControlName="designationId"
+      />
+
+      <ui-combobox
+        label="Main subject"
+        placeholderOption="Choose…"
+        [options]="subjectOptions()"
+        formControlName="subjectId"
+      />
     </div>
 
     <!--

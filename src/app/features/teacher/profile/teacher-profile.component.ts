@@ -11,9 +11,10 @@ import { Observable } from 'rxjs';
 import {
   UiBadgeComponent,
   UiButtonComponent,
+  UiComboboxComponent,
   UiModalComponent,
   UiMultiSelectComponent,
-  UiSelectOption,
+  lookupsToOptions,
 } from 'jp-shared/ui';
 
 import { NO_RESUME_CAP, ProfileSection, isHeldByResumeCap } from '../../../core/profile-completion';
@@ -86,6 +87,7 @@ const PROFICIENCY = [
     ReactiveFormsModule,
     UiBadgeComponent,
     UiButtonComponent,
+    UiComboboxComponent,
     UiModalComponent,
     UiMultiSelectComponent,
     ProfileMeterComponent,
@@ -132,14 +134,26 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
 
   protected readonly proficiencies = PROFICIENCY;
 
-  protected readonly subjectOptions = computed(() => toOptions(this.subjects()));
-  protected readonly classLevelOptions = computed(() => toOptions(this.classLevels()));
-  protected readonly skillOptions = computed(() => toOptions(this.skills()));
-  protected readonly languageOptions = computed(() => toOptions(this.languages()));
-  protected readonly stateOptions = computed(() => toOptions(this.states()));
+  /*
+    SR-3 (G27). Every master this screen puts in a dropdown, as options.
 
-  protected readonly designationOptions = computed(() => this.designations());
-  protected readonly qualificationOptions = computed(() => this.qualifications());
+    ⚠️ COMPUTED, NOT MAPPED INLINE IN THE TEMPLATE. `lookupsToOptions(subjects())`
+    written in an `[options]` binding runs on every change-detection pass and
+    hands the OnPush child a new array identity each time, which defeats the
+    very check that makes these controls cheap.
+
+    ⚠️ ONE CONVERSION FUNCTION, the library's. This file used to carry its own
+    `toOptions` — identical, and one more place for the two to drift.
+  */
+  protected readonly subjectOptions = computed(() => lookupsToOptions(this.subjects()));
+  protected readonly classLevelOptions = computed(() => lookupsToOptions(this.classLevels()));
+  protected readonly skillOptions = computed(() => lookupsToOptions(this.skills()));
+  protected readonly languageOptions = computed(() => lookupsToOptions(this.languages()));
+  protected readonly stateOptions = computed(() => lookupsToOptions(this.states()));
+  protected readonly designationOptions = computed(() => lookupsToOptions(this.designations()));
+  protected readonly qualificationOptions = computed(() =>
+    lookupsToOptions(this.qualifications()),
+  );
 
   // ---- the bridge selections ----------------------------------------------
   protected readonly selectedSubjects = signal<number[]>([]);
@@ -840,10 +854,6 @@ const SECTION_LABELS: Record<ProfileSection, string> = {
   salary: 'Expected salary',
   documents: 'Resume and documents',
 };
-
-function toOptions(items: Lookup[]): UiSelectOption[] {
-  return items.map((item) => ({ value: item.id, label: item.name }));
-}
 
 /** `2019-03-01` -> `2019-03`, for <input type="month">. */
 function toMonthInput(date: string | null): string {

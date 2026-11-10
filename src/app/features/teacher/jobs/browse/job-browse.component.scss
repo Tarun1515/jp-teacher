@@ -107,3 +107,19 @@
     width: 100%;
   }
 }
+
+/*
+  SR-3. The line that says the list is filtered to the teacher's profile.
+
+  Laid out here rather than given a design-system `.note--action` variant
+  because it is one screen's composition, not a new kind of note — the day a
+  second screen needs a note with an action beside it is the day it earns a
+  variant.
+*/
+.jobs__scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--jp-space-3);
+}
