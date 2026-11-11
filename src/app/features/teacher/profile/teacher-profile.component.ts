@@ -14,6 +14,7 @@ import {
   HasUnsavedChanges,
   MasterService,
   ToastService,
+  ResolvedAddress,
 } from 'jp-shared/core';
 import { DocumentType, Lookup, MASTER_KEYS } from 'jp-shared/models';
 import { Observable } from 'rxjs';
@@ -25,6 +26,7 @@ import {
   UiMultiSelectComponent,
   UiSelectOption,
   lookupsToOptions,
+  UiAddressSearchComponent,
 } from 'jp-shared/ui';
 
 import { NO_RESUME_CAP, ProfileSection, isHeldByResumeCap } from '../../../core/profile-completion';
@@ -162,6 +164,7 @@ let nextPlaceKey = 0;
   imports: [
     FormsModule,
     ReactiveFormsModule,
+    UiAddressSearchComponent,
     UiBadgeComponent,
     UiButtonComponent,
     UiComboboxComponent,
@@ -252,6 +255,28 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   protected readonly homeDistricts = signal<Lookup[]>([]);
   protected readonly homeCities = signal<Lookup[]>([]);
   protected readonly homeDistrictId = signal<number | null>(null);
+
+  /*
+    ---------------------------------------------------------------------------
+    THE ADDRESS SEARCH BOX IS `<ui-address-search>`, AND IT HOLDS NO STATE HERE
+    ---------------------------------------------------------------------------
+    🔴 THE THREE DROPDOWNS BELOW DO NOT CHANGE IN ANY WAY. The search box sits
+    on top of them and fills them in; it is one more way to answer the same
+    question, for somebody who would rather type "Sector 12, Gohana" than walk
+    three lists. Everything it can do, the dropdowns can still do, and the day
+    the provider is switched off the form is exactly what it was — the control
+    asks `availability` itself and renders nothing at all when it is false.
+
+    ⚠️ SO THERE IS NO SEARCH STATE ON THIS COMPONENT, DELIBERATELY. The query,
+    the suggestions, the debounce, the 3-character floor, the keyboard walk and
+    the "we could not find the district …" line all live in jp-shared. The box
+    reaches this screen through exactly one door — `(resolved)` ->
+    `onHomeAddressResolved` — and a typed query can therefore never touch
+    `draft`, which is what keeps the Save button from arming over an edit
+    nobody made (the trap `applyHomeLocation` carries a comment about for
+    `homeDistrictId`). The only thing that marks this card dirty is a resolved
+    address actually CHANGING the state or the town.
+  */
 
   /** One row per place the teacher would work. The order IS the preference. */
   protected readonly places = signal<readonly PreferredPlace[]>([]);
@@ -848,6 +873,207 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     this.set('currentCityId', cityId, 'salary');
   }
 
+  // =========================================================================
+  // THE ADDRESS SEARCH — WHAT THIS SCREEN DOES WITH AN ANSWER FROM IT
+  // =========================================================================
+  //
+  // 🔴 THE CONTROL IS `<ui-address-search>`, AND IT IS NOT THIS FILE'S. jp-shared
+  // owns the box: the debounce, the 3-character floor, the keyboard walk, the
+  // suggestion list, the silent degrade on a 429 or a timeout, the "we could not
+  // find the district …" line, and the `availability` question that decides
+  // whether any of it renders at all. What is left in this file is the only part
+  // that is this screen's business — where a resolved address GOES, which is a
+  // different question on every form that has one.
+  //
+  // 🔴 EVERY REQUEST STILL GOES TO OUR OWN API. The shared service talks to
+  // three routes on JP.App.Api and nothing else; the provider, the key and the
+  // billing all live on the server. Nothing in this component, this template or
+  // this bundle names a google domain or holds a key, and nothing may.
+
+  /**
+   * A resolved address, poured into the cascade that already exists.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 THE VALUES FIRST, THEN THE LISTS THAT GIVE THEM LABELS
+   * ----------------------------------------------------------------------------
+   * Both answers this form keeps — the state and the town — are decided
+   * SYNCHRONOUSLY, in one pass, before any request goes out. Everything async
+   * after that is only about fetching the lists the comboboxes need in order to
+   * render a label.
+   *
+   * That ordering is not a style choice. Clearing the town and re-writing it at
+   * the end of a chain of requests leaves a window of a few hundred
+   * milliseconds in which Save would have sent a state with no town —
+   * "anywhere in Haryana" instead of "Gohana", for an edit nobody made. One
+   * synchronous write has no such window.
+   *
+   * ⚠️ AND IT COSTS NOTHING ON SCREEN, because of how the template is built:
+   * the District and City comboboxes are behind `hasHomeDistricts()` /
+   * `hasHomeCities()`, so neither control is even rendered until its own list
+   * has arrived. There is no moment where a filled value reads as blank — the
+   * exact failure the 🔴 comment on `applyLocations` is about.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 A LEVEL THE RESOLVE DID NOT PRODUCE IS NEVER WRITTEN
+   * ----------------------------------------------------------------------------
+   * A search that found less than the form already holds must not be allowed to
+   * erase the difference. `unmatched` names the levels our masters do not have,
+   * and the honest answer to those is a sentence and a usable cascade — not a
+   * blanked one. So:
+   *
+   *   NO STATE AT ALL -> nothing is written and nothing is loaded. The provider
+   *     could not place the address in any state we have, the control's own
+   *     status line says which one it named, and the form is exactly as it was.
+   *     Clearing it would throw away a good answer because a third party did
+   *     not recognise a new one.
+   *
+   *   A STATE BUT NO TOWN -> the state is written, and the town is cleared ONLY
+   *     if the state actually moved. A town in the old state really is wrong
+   *     then (`onHomeStateChange`'s comment: wrong, not merely unlisted). If
+   *     the state did not move, the town already there is still valid data and
+   *     stays — the control's status line asks them to check the boxes.
+   *
+   *   A STATE AND A TOWN -> both written. This is the ordinary case.
+   *
+   * ⚠️ AND A VALUE THAT DID NOT CHANGE IS NOT WRITTEN AT ALL, so a resolve that
+   * confirms what was already on screen does not arm Save. `set()` marks the
+   * card dirty unconditionally, which is right for a real edit and wrong for a
+   * search that agreed with the form.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 THE `onHome*Change` HANDLERS ARE NOT CALLED, AND MUST NOT BE
+   * ----------------------------------------------------------------------------
+   * Each of them clears the level below it — that is their whole job as cascade
+   * rules. `onHomeStateChange(resolved.stateId)` would wipe the very town this
+   * method was called to fill in. What is reused instead is the plumbing those
+   * handlers share with `applyHomeLocation`: `loadDistricts`,
+   * `loadCitiesForDistrict` and `districtOfCity`, in the same order and through
+   * the same `onSettled` callbacks.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 NO TEHSIL AND NO VILLAGE IS WRITTEN ANYWHERE
+   * ----------------------------------------------------------------------------
+   * `resolved` carries `tehsilId`, `areaOrVillage`, `addressLine1`, `pincode`
+   * and coordinates. `t_app_teachers` has CurrentCityId and CurrentStateId and
+   * nothing else — 036_alter_address_columns.sql gave the finer columns to
+   * schools, to branches and to preferred locations, and deliberately not to
+   * the teacher row — so `UpdateTeacherProfileBody` has nowhere to put them and
+   * no control is added for them. Stashing a tehsil in a signal "for later"
+   * would be a value the server drops, which is this file's oldest rule: a
+   * field the server ignores is a field somebody will one day expect it to
+   * honour.
+   *
+   * ⚠️ WHICH IS THE ONE THING NOBODY IS TOLD ANY MORE. `<ui-address-search>`
+   * says what could not be MATCHED (`unmatched`), because that is true on every
+   * form. It cannot say what this particular form has nowhere to KEEP — only
+   * the host knows that — so a teacher who searched a full street address is no
+   * longer told that the sector and the pincode were dropped. See the report:
+   * it wants a `keeps`-style input on the shared control, not a second live
+   * region here saying a different thing two inches away.
+   */
+  protected onHomeAddressResolved(resolved: ResolvedAddress): void {
+    const draft = this.draft();
+    const stateId = resolved.stateId;
+
+    /*
+      A state our masters do not have — or no draft to write into yet. The
+      control's own status line names what the provider said, the three
+      dropdowns are untouched and usable, and nothing here pretends to have
+      learned anything.
+    */
+    if (draft === null || stateId === null) return;
+
+    const stateMoved = draft.currentStateId !== stateId;
+
+    // The town that will be in the box when this is done. See the 🔴 above.
+    const cityId = resolved.cityId ?? (stateMoved ? null : draft.currentCityId);
+
+    if (stateMoved) {
+      this.set('currentStateId', stateId, 'salary');
+    }
+
+    if (draft.currentCityId !== cityId) {
+      this.set('currentCityId', cityId, 'salary');
+    }
+
+    // The UI-only levels are rebuilt from the state down.
+    this.homeDistrictId.set(null);
+    this.homeDistricts.set([]);
+    this.homeCities.set([]);
+
+    this.loadDistricts(stateId, this.homeDistricts, () => {
+      /*
+        ⚠️ THE DISTRICT IS PLACED INSIDE THIS CALLBACK, NOT BESIDE THE CALL.
+        `onSettled` is what guarantees the list is in before the id is applied,
+        which is the ordering rule the whole of `applyLocations` is built on —
+        and it runs on failure too, so a dropped district list leaves the state
+        and the town alone instead of silently discarding them.
+      */
+      this.placeHomeDistrict(cityId, resolved);
+    });
+  }
+
+  /**
+   * Which district the cascade has to be shown through, and its town list.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 THE DISTRICT FOLLOWS THE TOWN, AND ONLY FALLS BACK ON THE RESOLVE
+   * ----------------------------------------------------------------------------
+   * The town list is fetched per district, so the district shown must be the one
+   * whose list CONTAINS the town in the box — otherwise the City combobox
+   * renders empty for a value it has. That gives one rule with two sources:
+   *
+   *   A TOWN THE RESOLVE PRODUCED -> the resolve's own district, free. The
+   *     server matches top down (state, then district in that state, then
+   *     tehsil in that district, then town under `tehsilId ?? districtId`), so
+   *     a `cityId` always arrives with the `districtId` it was matched beneath;
+   *     and 039_m_mdm_tehsil.sql asserts a town's tehsil belongs to that town's
+   *     district, so `city?parentId=<districtId>` holds the town whichever of
+   *     the two parents matched it. Correct by construction.
+   *
+   *   A TOWN THAT WAS ALREADY THERE -> `districtOfCity`, the same resolver a
+   *     page load uses. The resolve's district belongs to the address they
+   *     searched for, not to the town in the box, and using it would hide the
+   *     town behind a list that does not contain it.
+   *
+   *   NO TOWN -> the resolve's district, with its towns loaded, which is the
+   *     most useful place to leave somebody: one pick finishes the address the
+   *     search could only get part of the way through.
+   *
+   * ⚠️ WHY THE FREE ANSWER IS WORTH PREFERRING: `districtOfCity` derives the
+   * district from the UNPARENTED town master — every town in the country, about
+   * 900 rows today and several thousand once the remaining states are seeded.
+   * `applyHomeLocation` pays that on a page load, cached, with nobody watching.
+   * Here somebody has just clicked a suggestion and is waiting on it.
+   */
+  private placeHomeDistrict(cityId: number | null, resolved: ResolvedAddress): void {
+    const resolvedDistrictId = resolved.districtId;
+
+    // No town, or a town this very resolve produced: the resolve's district.
+    if (cityId === null || cityId === resolved.cityId) {
+      if (resolvedDistrictId === null) return;
+
+      this.homeDistrictId.set(resolvedDistrictId);
+      this.loadCitiesForDistrict(resolvedDistrictId, this.homeCities);
+      return;
+    }
+
+    // A town that was already in the box, placed the way a page load places it.
+    this.districtOfCity(cityId, (derived) => {
+      /*
+        🔴 A TOWN THAT CANNOT BE PLACED IS STILL KEPT. It is in the draft and it
+        stays there: the City box simply does not appear, and the next Save
+        sends the town it already had. Dropping it to tidy the screen would
+        rewrite a specific town as "anywhere in this state" — the same data loss
+        `applyPlaces` carries this comment about.
+      */
+      if (derived === null) return;
+
+      this.homeDistrictId.set(derived);
+      this.loadCitiesForDistrict(derived, this.homeCities);
+    });
+  }
+
   // ---- where you want to work ----------------------------------------------
 
   protected addPlace(): void {
@@ -1023,6 +1249,14 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   }
 
   private applyHomeLocation(profile: TeacherProfile): void {
+    /*
+      ⚠️ NOTHING CLEARS THE SEARCH BOX HERE ANY MORE, AND IT CANNOT FROM HERE.
+      `<ui-address-search>` owns its own text and exposes no reset, so after a
+      conflict reload the box still reads back the address that was searched
+      while these three dropdowns snap to the saved values. Cosmetic, and only
+      on that one path — but it is in the report, because the fix belongs to the
+      shared control, not to a second copy of its state in this file.
+    */
     this.homeDistrictId.set(null);
     this.homeDistricts.set([]);
     this.homeCities.set([]);

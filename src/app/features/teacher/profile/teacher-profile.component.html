@@ -675,6 +675,23 @@
           <p class="text-section-title">Where you live</p>
 
           <!--
+            🔴 ONE CONTROL, FROM jp-shared. The school side and this one were
+            written at the same time and each grew its own copy of the same
+            type-ahead over the same three endpoints — which is what G27
+            forbids, with no federation boundary to excuse it the way
+            jp-public has. They are one component now.
+
+            ⚠️ IT RENDERS ITSELF, OR NOT AT ALL. The control asks the API
+            whether a provider is configured and draws nothing when the answer
+            is no, so this template needs no availability guard around it.
+
+            ⚠️ WHAT COMES BACK IS STILL HANDLED HERE. The teacher’s own
+            location keeps only a state and a town, so the resolve has to be
+            applied by the component that knows that — not by the search box.
+          -->
+          <ui-address-search (resolved)="onHomeAddressResolved($event)" />
+
+          <!--
             🔴 SR-3 (G27): GEOGRAPHY IS A COMBOBOX, ALL THREE OF THEM. SR-1
             seeded 143 Haryana towns and every other state's districts; a
             native <select> over that is a list you can only use if you
@@ -693,6 +710,13 @@
             value has nowhere to be stored is a box that eats what somebody
             typed, so it is absent rather than decorative. If you are here to
             add one, add the column and the DTO field first.
+
+            ⚠️ AND THE SEARCH ABOVE DID NOT CHANGE THAT. A resolved address can
+            come back carrying a tehsil, a sector, a street and a pincode; this
+            form writes the state and the town and drops the rest. A search box
+            is not a reason to grow a control whose value has nowhere to go —
+            see `onHomeAddressResolved`, which also carries the one thing the
+            shared control cannot say for us: that the rest was dropped.
 
             ⚠️ The word "Optional" is NOT written on these — the combobox
             prints it itself whenever [required] is absent, and saying it twice
