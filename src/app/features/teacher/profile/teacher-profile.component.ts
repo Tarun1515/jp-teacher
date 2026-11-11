@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  Signal,
+  WritableSignal,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
   ConfirmDialogService,
@@ -14,6 +23,7 @@ import {
   UiComboboxComponent,
   UiModalComponent,
   UiMultiSelectComponent,
+  UiSelectOption,
   lookupsToOptions,
 } from 'jp-shared/ui';
 
@@ -23,6 +33,7 @@ import {
   SaveExperienceBody,
   TeacherDocument,
   TeacherExperience,
+  TeacherLocation,
   TeacherProfile,
   TeacherService,
   UpdateTeacherProfileBody,
@@ -37,6 +48,72 @@ const PROFICIENCY = [
   { value: 3, label: 'Fluent' },
   { value: 4, label: 'Native' },
 ];
+
+/**
+ * One row of "where you want to work" — one place, with its own cascade.
+ *
+ * ----------------------------------------------------------------------------
+ * 🔴 EVERY ROW OWNS ITS OWN LISTS, AND IT HAS TO
+ * ----------------------------------------------------------------------------
+ * Two rows are two different districts, so there is no single `cities()` the
+ * screen could hold: row 1 showing Hisar's towns and row 2 showing Sonipat's
+ * is the whole point of a per-row picker. A shared list would make the second
+ * row overwrite the first one's options the moment anybody touched it.
+ *
+ * ----------------------------------------------------------------------------
+ * ⚠️ THE OPTION ARRAYS ARE `computed` PER ROW, NOT MAPPED IN THE TEMPLATE
+ * ----------------------------------------------------------------------------
+ * The standing rule (SR-3 / G27) is that a list handed to `<ui-combobox>` must
+ * be a `computed` — `lookupsToOptions(row.cities())` written in an `[options]`
+ * binding builds a new array on every change-detection pass and hands the
+ * OnPush child a new identity each time, which defeats the very check that
+ * makes these controls cheap.
+ *
+ * Per row rather than one `computed` over the whole array deliberately: a
+ * single `computed(() => rows().map(...))` would hand EVERY row a new options
+ * identity whenever ANY row changed, which is the same defeat one level up.
+ * A row's `cityOptions` changes only when that row's own `cities` changes.
+ *
+ * ----------------------------------------------------------------------------
+ * ⚠️ `key` IS FOR `@for` TRACKING ONLY AND IS NEVER SENT
+ * ----------------------------------------------------------------------------
+ * Tracking by index would re-use one row's DOM — and therefore one row's open
+ * combobox and scroll position — for another row after a removal. Tracking by
+ * stateId cannot work: two rows legitimately share a state while the second
+ * one is still being filled in, and `@for` refuses duplicate keys.
+ */
+interface PreferredPlace {
+  readonly key: number;
+
+  readonly stateId: WritableSignal<number | null>;
+
+  /**
+   * ⚠️ NAVIGATIONAL, NOT AN ANSWER. The district is how the town list is
+   * reached; `TeacherLocation` has no districtId and none is sent. It is
+   * reconstructed from the saved city on re-open — see `districtOfCity`.
+   */
+  readonly districtId: WritableSignal<number | null>;
+
+  readonly cityId: WritableSignal<number | null>;
+
+  /**
+   * 🔴 COLLECTED BUT NOT YET SENT — see `loadTehsilsForCity` and
+   * `preferredLocationsToSave`. Today the control never appears, because the
+   * list it needs always comes back empty.
+   */
+  readonly tehsilId: WritableSignal<number | null>;
+
+  readonly districts: WritableSignal<Lookup[]>;
+  readonly cities: WritableSignal<Lookup[]>;
+  readonly tehsils: WritableSignal<Lookup[]>;
+
+  readonly districtOptions: Signal<UiSelectOption[]>;
+  readonly cityOptions: Signal<UiSelectOption[]>;
+  readonly tehsilOptions: Signal<UiSelectOption[]>;
+}
+
+/** Monotonic, module-scoped, so a removed row's key is never re-issued. */
+let nextPlaceKey = 0;
 
 /**
  * The teacher's profile — the largest screen in the product, and the one that
@@ -135,6 +212,51 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   protected readonly proficiencies = PROFICIENCY;
 
   /*
+    ---------------------------------------------------------------------------
+    P1. THE ADDRESS ORDER, AND WHY IT IS NOT THE ADMINISTRATIVE ONE
+    ---------------------------------------------------------------------------
+    Every address in the product now asks
+
+        State -> District -> City/Town -> Tehsil/Sub-tehsil -> Village/Area
+
+    and each control is DRIVEN BY the one above it. That is not how revenue
+    administration is organised — a tehsil sits above its towns — but it is how
+    people think. Nobody says "I am in Gohana tehsil"; they say "I am in
+    Gohana". Asking for the tehsil first also put the SAME NAME in front of the
+    user twice, once as a tehsil and once as its headquarters town, and the
+    client watched people pick the wrong one.
+
+    🔴 CITY IS LOADED BY DISTRICT, NEVER NARROWED BY TEHSIL. The old order used
+    the tehsil to narrow the town list, which made an "optional" step really
+    mean "required and badly labelled". Towns come from the district, all of
+    them, and the tehsil is pure extra detail afterwards.
+
+    ---------------------------------------------------------------------------
+    "WHERE YOU LIVE" STOPS AT THE TOWN, AND THE REASON IS THE TABLE
+    ---------------------------------------------------------------------------
+    🔴 `t_app_teachers` HAS ONLY CurrentCityId AND CurrentStateId. jp_app's
+    036_alter_address_columns.sql added TehsilId/AreaOrVillage to schools, to
+    branches and to teacher preferred locations, and deliberately not to the
+    teacher row — so `UpdateTeacherProfileBody` has nowhere to put a tehsil or
+    a village, and `set()` would not even compile with one.
+
+    So this cascade renders State -> District -> City/Town and stops. A control
+    whose value cannot leave the component is a control that eats what somebody
+    typed, and this file's own DTO comment says it best: "a field the server
+    ignores is a field somebody will one day expect it to honour."
+
+    ⚠️ DISTRICT IS NAVIGATIONAL HERE TOO. It is not in the draft and is not
+    sent; it exists so the town list can be reached, and is reconstructed from
+    the saved city on re-open.
+  */
+  protected readonly homeDistricts = signal<Lookup[]>([]);
+  protected readonly homeCities = signal<Lookup[]>([]);
+  protected readonly homeDistrictId = signal<number | null>(null);
+
+  /** One row per place the teacher would work. The order IS the preference. */
+  protected readonly places = signal<readonly PreferredPlace[]>([]);
+
+  /*
     SR-3 (G27). Every master this screen puts in a dropdown, as options.
 
     ⚠️ COMPUTED, NOT MAPPED INLINE IN THE TEMPLATE. `lookupsToOptions(subjects())`
@@ -155,13 +277,34 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     lookupsToOptions(this.qualifications()),
   );
 
+  protected readonly homeDistrictOptions = computed(() => lookupsToOptions(this.homeDistricts()));
+  protected readonly homeCityOptions = computed(() => lookupsToOptions(this.homeCities()));
+
+  /*
+    🔴 HIDDEN, NOT DISABLED-AND-EMPTY — the same contract the registration form
+    has carried since 2.47, and the one every geography endpoint is written to
+    honour: it answers cleanly with nothing, and the form hides the control.
+
+    An empty dropdown reads as "this screen is broken"; a disabled one is
+    something people keep clicking at. Districts and towns exist for every
+    state now, tehsils only for Haryana — so these guards are what lets one
+    template serve both without anything looking half-built.
+
+    ⚠️ NOTHING ELSE DEPENDS ON THE HIDDEN CONTROL. The helper lines live on the
+    controls themselves, the fields sit in a `.form-grid` with no separators
+    between them, and grid auto-flow closes the gap — so an absent control
+    leaves no empty cell, no dangling rule and no sentence pointing at a box
+    that is not there.
+  */
+  protected readonly hasHomeDistricts = computed(() => this.homeDistricts().length > 0);
+  protected readonly hasHomeCities = computed(() => this.homeCities().length > 0);
+
   // ---- the bridge selections ----------------------------------------------
   protected readonly selectedSubjects = signal<number[]>([]);
   protected readonly selectedClassLevels = signal<number[]>([]);
   protected readonly selectedSkills = signal<number[]>([]);
   protected readonly selectedLanguages = signal<number[]>([]);
   protected readonly proficiencyByLanguage = signal<Record<number, number | null>>({});
-  protected readonly selectedStates = signal<number[]>([]);
 
   // ---- files --------------------------------------------------------------
   protected readonly photoUrl = signal<string | null>(null);
@@ -265,11 +408,14 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     );
 
     /*
-      ⚠️ Preferred locations are states today, because the city dataset has not
-      been imported (2.47) and a location with a null city means "anywhere in
-      this state" — a real preference, not a placeholder.
+      🔴 THE GEOGRAPHY IS APPLIED SEPARATELY, AND IN ORDER.
+
+      Every other field above is a value with nowhere to look it up. A state,
+      district, town or tehsil id is only meaningful against the list it came
+      from, and those lists are fetched per parent — so applying them is a
+      sequence of requests, not an assignment. See `applyLocations`.
     */
-    this.selectedStates.set(profile.preferredLocations.map((l) => l.stateId));
+    this.applyLocations(profile);
 
     this.dirty.set(new Set());
     this.loadPhoto(profile);
@@ -421,11 +567,6 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     this.markDirty('skills');
   }
 
-  protected onStatesChange(ids: (string | number)[]): void {
-    this.selectedStates.set(ids.map(Number));
-    this.markDirty('locations');
-  }
-
   protected proficiencyOf(languageId: number): number | null {
     return this.proficiencyByLanguage()[languageId] ?? null;
   }
@@ -489,27 +630,496 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   protected saveLocations(): void {
     this.setState('locations', 'saving');
 
-    /*
-      ⚠️ cityId is null and stateId carries the answer: "anywhere in this state"
-      is the only preference expressible until the city dataset arrives (2.47),
-      and it is a real one rather than a stand-in.
-
-      preferenceOrder is the order they appear in — first chosen, first
-      preference — which is what somebody means by listing them.
-    */
-    const locations = this.selectedStates().map((stateId, index) => ({
-      cityId: null,
-      stateId,
-      preferenceOrder: index + 1,
-    }));
-
-    this.teachers.savePreferredLocations(locations).subscribe({
+    this.teachers.savePreferredLocations(this.preferredLocationsToSave()).subscribe({
       next: () => {
         this.setState('locations', 'saved');
         this.clearDirty('locations');
         this.refresh();
       },
       error: () => this.setState('locations', 'idle'),
+    });
+  }
+
+  // =========================================================================
+  // GEOGRAPHY — ONE CASCADE, TWO PLACES IT IS USED
+  // =========================================================================
+  //
+  // 🔴 THE MASTER KEYS LIVE IN EXACTLY THREE METHODS: `loadDistricts`,
+  // `loadCitiesForDistrict` and `loadTehsilsForCity`. Both the teacher's own
+  // location and every preferred-location row go through them, so the day a
+  // key or an endpoint moves there is one line to change per level — not one
+  // per control, which is how two cascades on one screen start disagreeing.
+
+  /**
+   * Districts of a state.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 `onSettled` IS THE WHOLE POINT OF THESE THREE SIGNATURES
+   * ----------------------------------------------------------------------------
+   * A saved id is applied INSIDE it, never beside the call — that ordering is
+   * what stops a combobox rendering blank for a value it has (`applyPlaces`).
+   *
+   * ⚠️ AND IT RUNS ON FAILURE TOO, WHICH IS NOT SLOPPINESS. Only the LABEL
+   * depends on the list; the VALUE does not. Calling it from `next` alone
+   * meant a dropped request silently left `cityId` unset, and the next Save
+   * would have widened "Sonipat town" to "anywhere in Haryana" — a change to a
+   * preference the teacher never touched. A blank field is a cosmetic failure;
+   * that one is data loss, and it is the kind nobody reports because nobody
+   * sees it happen.
+   */
+  private loadDistricts(
+    stateId: number,
+    into: WritableSignal<Lookup[]>,
+    onSettled?: () => void,
+  ): void {
+    this.masters.getByParent(MASTER_KEYS.district, stateId).subscribe({
+      next: (items) => {
+        into.set(items);
+        onSettled?.();
+      },
+      // An empty list and a failed call look the same to the form on purpose:
+      // both mean "no districts to offer", and both degrade to state-only.
+      error: () => {
+        into.set([]);
+        onSettled?.();
+      },
+    });
+  }
+
+  /**
+   * Every town in the district.
+   *
+   * 🔴 BY DISTRICT, NOT BY TEHSIL, AND ALL OF THEM. The tehsil step is
+   * optional and now comes AFTER the town, so narrowing towns by tehsil would
+   * mean a teacher who skips the tehsil never reaches a town at all. The
+   * masters endpoint returns `DistrictId AS ParentId` for this call, which is
+   * what `districtOfCity` reads back on re-open.
+   */
+  private loadCitiesForDistrict(
+    districtId: number,
+    into: WritableSignal<Lookup[]>,
+    onSettled?: () => void,
+  ): void {
+    this.masters.getByParent(MASTER_KEYS.city, districtId).subscribe({
+      next: (items) => {
+        into.set(items);
+        onSettled?.();
+      },
+      error: () => {
+        into.set([]);
+        onSettled?.();
+      },
+    });
+  }
+
+  /**
+   * The tehsils of ONE TOWN — the optional last level of the new order.
+   *
+   * ----------------------------------------------------------------------------
+   * ✅ THE KEY IS REPOINTED — ⚠️ BUT THE SAVE STILL IS NOT
+   * ----------------------------------------------------------------------------
+   * `m_mdm_city.TehsilId` is the authoritative link and it is guarded in the
+   * schema: 039_m_mdm_tehsil.sql asserts that a city's tehsil, when set,
+   * belongs to that city's district. It is not expressible through the
+   * `Lookup` shape (id/code/name/displayOrder/parentId), so P1 gave it its own
+   * master key rather than overloading the district-parented `TEHSIL` branch —
+   * a district id and a city id are both plain ints, and a branch that had to
+   * guess which it was handed would answer a real list for a real id.
+   *
+   * `MASTER_KEYS.tehsilByCity` ('tehsil-by-city') is that key, and the call
+   * below now uses it. A city with no tehsil returns `[]`, which hides the
+   * control exactly as a state with no tehsils always has.
+   *
+   * 🔴 WHAT IS STILL MISSING, AND WHY NO CONTROL IS RENDERED YET:
+   *
+   *   THE SAVE. `TeacherLocation` has no `tehsilId`, and neither does the
+   *      `dbo.PreferredLocationList` table type nor
+   *      USP_SaveTeacherPreferredLocations — although
+   *      `t_app_teacher_preferred_locations.TehsilId` EXISTS and 036's own
+   *      comment says "SR-3 lands the picker; this is the column it writes
+   *      to". Until that hop lands, landing (1) alone would make this control
+   *      appear and then silently drop what was chosen. See
+   *      `preferredLocationsToSave`.
+   */
+  private loadTehsilsForCity(
+    cityId: number,
+    into: WritableSignal<Lookup[]>,
+    onSettled?: () => void,
+  ): void {
+    this.masters.getByParent(MASTER_KEYS.tehsilByCity, cityId).subscribe({
+      next: (items) => {
+        into.set(items);
+        onSettled?.();
+      },
+      error: () => {
+        into.set([]);
+        onSettled?.();
+      },
+    });
+  }
+
+  /**
+   * Which district a saved town belongs to.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 WHY THIS IS NEEDED AT ALL
+   * ----------------------------------------------------------------------------
+   * What is stored is a town. `t_app_teacher_preferred_locations` has
+   * CityId/StateId/TehsilId and NO DistrictId — correctly, because a town
+   * already determines its district (`m_mdm_city.DistrictId` is NOT NULL). But
+   * the new order needs that district before it can show the town, because the
+   * town list is fetched per district. So a saved city has to be PLACED before
+   * it can be displayed, and the district is derived, never read back.
+   *
+   * ⚠️ THE ROW'S OWN CITY LIST CANNOT BE THE SOURCE, which is the obvious first
+   * idea and is circular: that list is `city?parentId=<districtId>`, so it
+   * cannot be fetched until the district is known. The unparented list is what
+   * breaks the cycle.
+   *
+   * ⚠️ READ FROM `parentId`, NOT COMPUTED FROM THE ID. The unparented city
+   * master returns `DistrictId AS ParentId` on every row, and `DistrictId` is
+   * NOT NULL on `m_mdm_city`. The seed does namespace ids arithmetically
+   * (town = StateId * 10000 + n, district = StateId * 100 + n) and it would be
+   * briefly tempting to divide — that is a seed artefact, not a contract, and
+   * the day one state is loaded from a different source it would send every
+   * saved address somewhere else.
+   *
+   * ⚠️ ONE UNPARENTED REQUEST, LAZILY, AND SHARED. It is made only when a
+   * saved town actually has to be placed, and `MasterService` caches it for
+   * the session — so the teacher's own location and all N preferred rows cost
+   * one call between them, not N. /browse already loads the same list.
+   *
+   * ⚠️ AND IT IS THE WHOLE COUNTRY'S TOWNS, which is the price of doing this
+   * on the client. About 900 rows today; several thousand once every state's
+   * towns are seeded. A `GET /masters/city/{id}` returning one row — or a
+   * districtId on the location DTO — would make this a lookup instead of a
+   * download. Neither is this agent's to add; it is in the report.
+   */
+  private districtOfCity(cityId: number, then: (districtId: number | null) => void): void {
+    this.masters.get(MASTER_KEYS.city).subscribe({
+      next: (cities) => then(cities.find((c) => c.id === cityId)?.parentId ?? null),
+
+      // A town we cannot place is left unplaced rather than guessed at: the
+      // state still shows, and the row still saves the town it already had.
+      error: () => then(null),
+    });
+  }
+
+  // ---- the teacher's own location ------------------------------------------
+
+  /**
+   * CASCADE RULE: a new state invalidates everything under it.
+   *
+   * ⚠️ The town is cleared because a town in the old state is now wrong — not
+   * merely unlisted, wrong. This is the one clearing that must never be
+   * "helpful" and keep the old value.
+   */
+  protected onHomeStateChange(stateId: number | null): void {
+    this.set('currentStateId', stateId, 'salary');
+    this.set('currentCityId', null, 'salary');
+    this.homeDistrictId.set(null);
+    this.homeDistricts.set([]);
+    this.homeCities.set([]);
+
+    if (stateId !== null) {
+      this.loadDistricts(stateId, this.homeDistricts);
+    }
+  }
+
+  /** CASCADE RULE: a new district clears the town and reloads the town list. */
+  protected onHomeDistrictChange(districtId: number | null): void {
+    this.homeDistrictId.set(districtId);
+    this.set('currentCityId', null, 'salary');
+    this.homeCities.set([]);
+
+    if (districtId !== null) {
+      this.loadCitiesForDistrict(districtId, this.homeCities);
+    }
+  }
+
+  /**
+   * CASCADE RULE: the town is the last level here.
+   *
+   * ⚠️ Nothing hangs off it: there is no tehsil or village control in this
+   * section, because `t_app_teachers` has no column for either. See the
+   * geography comment above the signals.
+   */
+  protected onHomeCityChange(cityId: number | null): void {
+    this.set('currentCityId', cityId, 'salary');
+  }
+
+  // ---- where you want to work ----------------------------------------------
+
+  protected addPlace(): void {
+    this.places.update((places) => [...places, newPlace()]);
+    this.markDirty('locations');
+  }
+
+  protected removePlace(place: PreferredPlace): void {
+    this.places.update((places) => places.filter((p) => p.key !== place.key));
+    this.markDirty('locations');
+  }
+
+  /** CASCADE RULE: as the own location — a new state invalidates all of it. */
+  protected onPlaceStateChange(place: PreferredPlace, stateId: number | null): void {
+    place.stateId.set(stateId);
+    place.districtId.set(null);
+    place.cityId.set(null);
+    place.tehsilId.set(null);
+    place.districts.set([]);
+    place.cities.set([]);
+    place.tehsils.set([]);
+
+    if (stateId !== null) {
+      this.loadDistricts(stateId, place.districts);
+    }
+
+    this.markDirty('locations');
+  }
+
+  /** CASCADE RULE: a new district clears town and tehsil, and reloads towns. */
+  protected onPlaceDistrictChange(place: PreferredPlace, districtId: number | null): void {
+    place.districtId.set(districtId);
+    place.cityId.set(null);
+    place.tehsilId.set(null);
+    place.cities.set([]);
+    place.tehsils.set([]);
+
+    if (districtId !== null) {
+      this.loadCitiesForDistrict(districtId, place.cities);
+    }
+
+    this.markDirty('locations');
+  }
+
+  /**
+   * CASCADE RULE: the town is the tehsil's parent now.
+   *
+   * 🔴 CLEARING THE TOWN CLEARS THE TEHSIL TOO, and that is not tidiness. A
+   * tehsil is a child of the town in this order; kept behind a cleared town it
+   * would be a value with no parent, saved against "anywhere in this state" —
+   * a narrower claim than the teacher just made.
+   *
+   * ⚠️ AND A NEW TOWN DOES NOT KEEP THE OLD TEHSIL EITHER. The tehsil list is
+   * refetched for the new town, and a tehsil from the previous one is not in
+   * it. There is no name-matching and no carrying-over here: `m_mdm_city`'s
+   * own `TehsilId` is the authoritative link, and guessing at it by name would
+   * be a coincidence standing in for a foreign key.
+   */
+  protected onPlaceCityChange(place: PreferredPlace, cityId: number | null): void {
+    place.cityId.set(cityId);
+    place.tehsilId.set(null);
+    place.tehsils.set([]);
+
+    if (cityId !== null) {
+      this.loadTehsilsForCity(cityId, place.tehsils);
+    }
+
+    this.markDirty('locations');
+  }
+
+  protected onPlaceTehsilChange(place: PreferredPlace, tehsilId: number | null): void {
+    place.tehsilId.set(tehsilId);
+    this.markDirty('locations');
+  }
+
+  /** Whether a row's state has any town worth narrowing to. */
+  protected placeHasDistricts(place: PreferredPlace): boolean {
+    return place.districts().length > 0;
+  }
+
+  protected placeHasCities(place: PreferredPlace): boolean {
+    return place.cities().length > 0;
+  }
+
+  protected placeHasTehsils(place: PreferredPlace): boolean {
+    return place.tehsils().length > 0;
+  }
+
+  /**
+   * What goes on the wire.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 THE SHAPE IS UNCHANGED: cityId, stateId, preferenceOrder (2.47/2.54).
+   * ----------------------------------------------------------------------------
+   * Reordering the CONTROLS changed nothing about what a row means. A row with
+   * a town saves that town; a row with only a state saves `cityId: null`,
+   * which means "anywhere in this state" and is a real preference rather than
+   * a gap. The endpoint still receives the COMPLETE set.
+   *
+   * ⚠️ A ROW WITH NO STATE IS NOT A PREFERENCE. The picker starts with one
+   * empty row so it reads as a control rather than a bare button, and an
+   * untouched one must not become "anywhere in nowhere".
+   *
+   * ⚠️ DUPLICATES COLLAPSE HERE, KEEPING THE FIRST. The target's unique index
+   * is (TeacherId, CityId, StateId) and USP_SaveTeacherPreferredLocations
+   * already does `GROUP BY CityId, StateId` taking `MIN(PreferenceOrder)`.
+   * Doing it here as well is not duplication of that rule, it is agreement
+   * with it: it keeps preferenceOrder contiguous 1..n, so the order the
+   * teacher set is the order that comes back after the re-read.
+   *
+   * 🔴 tehsilId IS DELIBERATELY NOT SENT. `TeacherLocation` has no such field
+   * (nor does the TVP, nor the procedure). The one line to add the day they do
+   * is here, next to cityId — and it must land in the SAME change as the
+   * tehsil-by-city master, or the control starts eating a choice. See
+   * `loadTehsilsForCity`.
+   */
+  private preferredLocationsToSave(): TeacherLocation[] {
+    const seen = new Set<string>();
+    const locations: TeacherLocation[] = [];
+
+    for (const place of this.places()) {
+      const stateId = place.stateId();
+      if (stateId === null) continue;
+
+      const cityId = place.cityId();
+
+      const identity = `${stateId}:${cityId ?? 'any'}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+
+      locations.push({ cityId, stateId, preferenceOrder: locations.length + 1 });
+    }
+
+    return locations;
+  }
+
+  // ---- re-opening what was saved -------------------------------------------
+
+  /**
+   * Puts the saved geography back on screen.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 A SAVED ID IS APPLIED ONLY AFTER THE LIST THAT CONTAINS IT HAS ARRIVED
+   * ----------------------------------------------------------------------------
+   * `<ui-combobox>` shows `selected()?.label`, computed over `options()` — so
+   * a value whose option is missing renders as an EMPTY FIELD. It is not
+   * cleared, and it does re-appear if the list arrives later, but "blank for a
+   * valid saved value" is indistinguishable from "we lost it" to the person
+   * reading the screen.
+   *
+   * So every level is loaded by the callback of the one above it, and the id
+   * is set inside that callback. The chain per row is:
+   *
+   *     state (already loaded) -> districts -> saved city's district
+   *       -> cities -> saved city -> tehsils -> saved tehsil
+   *
+   * ⚠️ THE DISTRICT IS DERIVED, NOT READ BACK, because
+   * `t_app_teacher_preferred_locations` has no DistrictId and should not: a
+   * town determines its district. That derivation is the extra hop in the
+   * chain above, and it has to finish before the town list can even be asked
+   * for. See `districtOfCity`.
+   *
+   * ⚠️ THE ONE EXCEPTION IS THE STATE, and it is only an exception on paper.
+   * The state master is unparented and fetched in the constructor, so there is
+   * no parent to wait for — the two requests race, and the combobox fills in
+   * whichever order they land, because `selected` is a computed over the
+   * options input. Everything below the state has a parent, and therefore an
+   * order that must be kept.
+   */
+  private applyLocations(profile: TeacherProfile): void {
+    this.applyHomeLocation(profile);
+    this.applyPlaces(profile);
+  }
+
+  private applyHomeLocation(profile: TeacherProfile): void {
+    this.homeDistrictId.set(null);
+    this.homeDistricts.set([]);
+    this.homeCities.set([]);
+
+    const stateId = profile.currentStateId;
+    const cityId = profile.currentCityId;
+
+    if (stateId !== null) {
+      this.loadDistricts(stateId, this.homeDistricts);
+    }
+
+    if (cityId === null) return;
+
+    /*
+      ⚠️ The town's own value is in the draft and was set by `apply()` — this
+      is the LIST it needs, fetched through the district it had to be placed in
+      first. Nothing here writes `currentCityId`; writing it would mark the
+      section dirty on a plain page load and arm the Save button over an edit
+      nobody made.
+
+      ⚠️ WHICH ALSO MEANS A TOWN THAT CANNOT BE PLACED IS KEPT, for free: the
+      draft still holds it, so the field reads blank but the next Save sends
+      the same town back. The row picker has to do that explicitly — see the
+      matching comment in `applyPlaces`.
+    */
+    this.districtOfCity(cityId, (districtId) => {
+      if (districtId === null) return;
+
+      this.homeDistrictId.set(districtId);
+      this.loadCitiesForDistrict(districtId, this.homeCities);
+    });
+  }
+
+  private applyPlaces(profile: TeacherProfile): void {
+    /*
+      ⚠️ SORTED BY preferenceOrder, not taken in arrival order. "First
+      preference" is a value in the row, not a position in the array — and the
+      row order on screen is what this screen writes back as that value, so
+      reading it from anywhere else would let the two drift.
+    */
+    const saved = [...profile.preferredLocations].sort(
+      (a, b) => a.preferenceOrder - b.preferenceOrder,
+    );
+
+    /*
+      ⚠️ ONE EMPTY ROW WHEN THERE IS NOTHING SAVED, so the section reads as a
+      control rather than as a button next to an explanation. It saves nothing
+      by itself (see `preferredLocationsToSave`) and marks nothing dirty.
+    */
+    if (saved.length === 0) {
+      this.places.set([newPlace()]);
+      return;
+    }
+
+    const places = saved.map((location) => newPlace(location.stateId));
+    this.places.set(places);
+
+    saved.forEach((location, index) => {
+      const place = places[index];
+      if (place === undefined) return;
+
+      this.loadDistricts(location.stateId, place.districts);
+
+      const cityId = location.cityId;
+      if (cityId === null) return;
+
+      this.districtOfCity(cityId, (districtId) => {
+        /*
+          🔴 A TOWN THAT CANNOT BE PLACED IS STILL KEPT.
+
+          The town master was unreachable, or no longer has this row. Either
+          way the row keeps the town it was saved with: the field reads blank
+          until the list can be fetched again, which is ugly, and dropping it
+          instead would make the next Save rewrite "Sonipat town" as "anywhere
+          in Haryana" without anybody asking for it.
+        */
+        if (districtId === null) {
+          place.cityId.set(cityId);
+          return;
+        }
+
+        place.districtId.set(districtId);
+
+        this.loadCitiesForDistrict(districtId, place.cities, () => {
+          place.cityId.set(cityId);
+
+          /*
+            ⚠️ Loaded for a re-opened row as well as a freshly picked one, so a
+            row does not change shape after a reload. It costs one request per
+            saved town — cached per parent by `MasterService` — and today every
+            one of them comes back empty, which is why no tehsil control
+            appears on this screen yet. The saved tehsil would be applied in
+            this callback, the day `TeacherLocation` carries one.
+          */
+          this.loadTehsilsForCity(cityId, place.tehsils);
+        });
+      });
     });
   }
 
@@ -854,6 +1464,38 @@ const SECTION_LABELS: Record<ProfileSection, string> = {
   salary: 'Expected salary',
   documents: 'Resume and documents',
 };
+
+/**
+ * A fresh preferred-location row.
+ *
+ * ⚠️ MODULE-SCOPED, NOT A METHOD, because it touches no injected service — and
+ * because `computed()` needs no injection context, unlike `effect()`. Keeping
+ * it out of the class makes it obvious that building a row cannot fire a
+ * request: every list starts empty and is filled by the cascade.
+ */
+function newPlace(stateId: number | null = null): PreferredPlace {
+  const districts = signal<Lookup[]>([]);
+  const cities = signal<Lookup[]>([]);
+  const tehsils = signal<Lookup[]>([]);
+
+  return {
+    key: ++nextPlaceKey,
+    stateId: signal(stateId),
+    districtId: signal<number | null>(null),
+    cityId: signal<number | null>(null),
+    tehsilId: signal<number | null>(null),
+    districts,
+    cities,
+    tehsils,
+
+    // The per-row `computed`s the interface's comment is about. They close over
+    // this row's own signals, so one row's options never change identity
+    // because another row did.
+    districtOptions: computed(() => lookupsToOptions(districts())),
+    cityOptions: computed(() => lookupsToOptions(cities())),
+    tehsilOptions: computed(() => lookupsToOptions(tehsils())),
+  };
+}
 
 /** `2019-03-01` -> `2019-03`, for <input type="month">. */
 function toMonthInput(date: string | null): string {

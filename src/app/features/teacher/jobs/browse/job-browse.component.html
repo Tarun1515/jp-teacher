@@ -33,7 +33,7 @@
       passing the name would leave a screen reader announcing "combobox" and
       nothing more.
     -->
-    <div class="page__toolbar__control">
+    <div class="page__toolbar__control page__toolbar__control--summary">
       <ui-multi-select
         ariaLabel="Subjects"
         itemNoun="subject"
@@ -44,30 +44,47 @@
       />
     </div>
 
-    <div class="page__toolbar__control">
+    <div class="page__toolbar__control page__toolbar__control--summary">
       <ui-multi-select
         ariaLabel="Class levels"
         itemNoun="class level"
-        placeholder="Any class level"
+        placeholder="All class levels"
         [options]="classLevelOptions()"
         [ngModel]="classLevelIds()"
         (ngModelChange)="onClassLevelsChange($event)"
       />
     </div>
 
+    <!--
+      P4. Qualification is pre-filled from the profile, so it is SHOWN. A
+      dimension that narrows the list without appearing in the toolbar is the
+      silent pre-filter the banner above exists to prevent.
+    -->
+    <div class="page__toolbar__control page__toolbar__control--summary">
+      <ui-multi-select
+        ariaLabel="Qualifications"
+        itemNoun="qualification"
+        placeholder="All qualifications"
+        [options]="qualificationOptions()"
+        [ngModel]="qualificationIds()"
+        (ngModelChange)="onQualificationsChange($event)"
+      />
+    </div>
+
+    <!--
+      P3 (G27). Employment type was the last plain <select> on this screen, and
+      it is master-fed like every other control here — so it is a combobox now.
+      ⚠️ The id `filter-employment` went with it: <ui-combobox> owns its own id,
+      which is why this carries `ariaLabel` instead of an outside <label for>.
+    -->
     <div class="page__toolbar__control">
-      <label class="visually-hidden" for="filter-employment">Employment type</label>
-      <select
-        class="form-control"
-        id="filter-employment"
+      <ui-combobox
+        ariaLabel="Employment type"
+        placeholderOption="All types"
+        [options]="employmentTypeOptions()"
         [ngModel]="employmentTypeId()"
         (ngModelChange)="employmentTypeId.set($event); onFilterChange()"
-      >
-        <option [ngValue]="null">Any type</option>
-        @for (t of employmentTypes(); track t.id) {
-          <option [ngValue]="t.id">{{ t.name }}</option>
-        }
-      </select>
+      />
     </div>
 
     <div class="page__toolbar__control">
@@ -104,13 +121,78 @@
   -->
   @if (matchedToProfile()) {
     <p class="note jobs__scope" style="--jp-enter-index: 2">
-      <span>Showing jobs that match your profile — your subjects, the classes you teach, and where you want to work.</span>
+      <!--
+        ⚠️ IT NO LONGER SAYS "where you want to work". That is the third tab's
+        job now: "Matches your profile" is scoped to the state the teacher
+        LIVES in, resolved on the server, while the places they asked for have
+        a tab of their own. The old sentence would have claimed both.
+      -->
+      <span>Showing jobs that match your profile — your subjects, the classes you teach, and your qualification.</span>
       <button type="button" class="btn btn--ghost btn--sm" (click)="showAll()">Show all jobs</button>
     </p>
-  } @else if (widenedAfterNoMatch()) {
-    <p class="note jobs__scope" style="--jp-enter-index: 2">
-      <span>Nothing open matches your profile just yet, so this is every job that is open.</span>
+  }
+
+  <!--
+    🔴 P5: SEARCH SITS ABOVE THE TABS, AND IT REPLACES THEM.
+
+    Typing a school's name is not browsing your matches any more. Leaving the
+    tabs in force underneath would answer "no results" for a job that plainly
+    exists, with nothing on screen explaining why — so a search switches the
+    list into its own state and names the way back.
+  -->
+  <form class="jobs__search" (ngSubmit)="submitKeyword()" style="--jp-enter-index: 3">
+    <label class="visually-hidden" for="jobKeyword">Search jobs by title or school</label>
+    <input
+      id="jobKeyword"
+      type="search"
+      class="input"
+      placeholder="Search by job title or school name"
+      [ngModel]="keywordInput()"
+      (ngModelChange)="keywordInput.set($event)"
+      name="jobKeyword"
+    />
+    <ui-button type="submit" variant="secondary">Search</ui-button>
+  </form>
+
+  @if (searching()) {
+    <p class="note jobs__scope" style="--jp-enter-index: 4">
+      <span>Search results for “{{ keyword() }}”.</span>
+      <button type="button" class="btn btn--ghost btn--sm" (click)="clearKeyword()">Back to your jobs</button>
     </p>
+  } @else if (tabsApply()) {
+    <!--
+      ⚠️ THE COUNTS COME FROM THE SERVER AND MAY BE ABSENT. `counts()` is null
+      until the first reply and null again if that call fails; the labels then
+      carry no number rather than claiming zero beside a list of twelve.
+    -->
+    <div class="jobs__tabs" role="tablist" aria-label="How these jobs were chosen" style="--jp-enter-index: 4">
+      <button
+        type="button"
+        role="tab"
+        class="jobs__tab"
+        [class.jobs__tab--active]="mode() === 'matches'"
+        [attr.aria-selected]="mode() === 'matches'"
+        (click)="setMode('matches')"
+      >Matches your profile@if (counts(); as c) { ({{ c.matches }}) }</button>
+
+      <button
+        type="button"
+        role="tab"
+        class="jobs__tab"
+        [class.jobs__tab--active]="mode() === 'might-like'"
+        [attr.aria-selected]="mode() === 'might-like'"
+        (click)="setMode('might-like')"
+      >You might like@if (counts(); as c) { ({{ c.mightLike }}) }</button>
+
+      <button
+        type="button"
+        role="tab"
+        class="jobs__tab"
+        [class.jobs__tab--active]="mode() === 'preferred'"
+        [attr.aria-selected]="mode() === 'preferred'"
+        (click)="setMode('preferred')"
+      >Preferred locations@if (counts(); as c) { ({{ c.preferred }}) }</button>
+    </div>
   }
 
   @if (loading()) {
@@ -205,8 +287,24 @@
                 </span>
               }
 
-              <a class="btn btn--sm btn--primary job__open" [routerLink]="['/jobs', row.jobId]">
-                {{ row.hasApplied ? 'View' : 'View and apply' }}
+              <!--
+                🔒 P5. APPLY FROM THE CARD — AND IT OPENS A SHEET, NOT A SEND.
+                The sheet names the job and states the consequence before
+                anything happens, which is the part of 2.56 that matters. The
+                control is absent once applied, because the fact above already
+                says where they stand and a second Apply would invite a
+                double-tap the server only has to refuse.
+              -->
+              @if (!row.hasApplied) {
+                <button
+                  type="button"
+                  class="btn btn--sm btn--primary job__apply"
+                  (click)="openApply(row, $event)"
+                >Apply</button>
+              }
+
+              <a class="btn btn--sm btn--ghost job__open" [routerLink]="['/jobs', row.jobId]">
+                {{ row.hasApplied ? 'View' : 'View details' }}
               </a>
             </div>
           </div>
@@ -250,3 +348,67 @@
     }
   }
 </div>
+
+<!--
+  🔒 P5. THE APPLY SHEET — 2.56's "CONSEQUENCE STATED", ON THE LIST.
+
+  Until now applying could only happen on the job's own page, because that was
+  where the consequence could be written down. The sentence came with the
+  control: this sheet NAMES THE JOB and says what the school will be able to
+  see, before anything is sent.
+
+  ⚠️ `closeOnBackdrop` IS LEFT ON. A half-typed cover note is not the kind of
+  loss that justifies trapping somebody in a dialog — unlike a half-completed
+  job posting, this reopens in one click and the note is optional.
+-->
+@if (applyTarget(); as job) {
+  <ui-modal
+    [open]="true"
+    title="Apply to this job"
+    size="md"
+    (closed)="closeApply()"
+  >
+    <p class="apply-sheet__job"><strong>{{ job.jobTitle }}</strong> — {{ job.schoolName }}</p>
+    <p class="apply-sheet__where">{{ locationLabel(job) }}</p>
+
+    <p class="apply-sheet__consent">
+      Applying lets this school see your profile and contact you. It is how you
+      give them that permission — nothing else on this screen does.
+    </p>
+
+    <label class="form-label" for="applyCoverNote">A note to the school (optional)</label>
+    <textarea
+      id="applyCoverNote"
+      class="form-control"
+      rows="3"
+      [ngModel]="applyCoverNote()"
+      (ngModelChange)="applyCoverNote.set($event)"
+      placeholder="Anything you would like them to know."
+    ></textarea>
+
+    <!--
+      ⚠️ BOTH REFUSALS ARE RENDERED HERE, not as a toast. Each is something the
+      teacher can act on, and a toast that scrolls away would leave them looking
+      at a button that did nothing.
+    -->
+    @if (applyResumeMissing()) {
+      <p class="note" role="alert">
+        You need a resume on your profile before you can apply.
+        <a routerLink="/profile">Add your resume</a>
+      </p>
+    } @else if (applyExpired()) {
+      <p class="note" role="alert">
+        This posting has closed since the list was loaded, so the application was not sent.
+      </p>
+    }
+
+    <ng-container footer>
+      <ui-button variant="ghost" (click)="closeApply()">Cancel</ui-button>
+      <ui-button
+        variant="primary"
+        [disabled]="applyBusy() || applyExpired()"
+        (click)="confirmApply()"
+      >{{ applyBusy() ? 'Sending …' : 'Apply' }}</ui-button>
+    </ng-container>
+  </ui-modal>
+}

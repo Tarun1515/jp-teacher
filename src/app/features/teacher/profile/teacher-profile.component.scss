@@ -100,6 +100,74 @@
 }
 
 // -----------------------------------------------------------------------------
+// WHERE YOU WANT TO WORK — one row per place, each with its own cascade
+//
+// 🔴 THE ROW IS A RULED ROW, NOT A BOXED CARD. Three or four comboboxes inside
+// a bordered panel, repeated four times, reads as four forms on one screen. A
+// rule between rows is the same grammar the timeline and the documents list
+// already use here, and it costs nothing at 375px.
+//
+// ⚠️ NO SEPARATOR ON THE LAST ROW AND NONE ON THE FIRST — `& + &` only, so a
+// single row has no rule at all and a hidden control cannot leave a dangling
+// line behind it.
+// -----------------------------------------------------------------------------
+.places {
+  @include m.flex-column(0);
+
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.places__row {
+  display: flex;
+  align-items: flex-start;
+  gap: v.$space-3;
+  padding: v.$space-4 0;
+
+  & + & { border-top: var(--jp-rule-width) solid var(--jp-rule); }
+
+  &:first-child { padding-top: 0; }
+}
+
+// The cascade itself. `min-width: 0` so a long town name truncates inside the
+// grid instead of pushing the Remove button off a 375px screen.
+.places__fields {
+  flex: 1;
+  min-width: 0;
+}
+
+// ⚠️ TOP-ALIGNED, NOT NUDGED DOWN TO THE FIRST INPUT. A padding chosen to clear
+// `<ui-combobox>`'s own label is a magic number that depends on that
+// component's type metrics, and it breaks the day the label's line-height
+// changes in jp-shared. Level with the first label reads as a row action, which
+// is what it is — and it is the alignment `.timeline__item` and
+// `.documents__item` in this same file already use.
+.places__actions {
+  flex-shrink: 0;
+}
+
+.places__add {
+  @include m.flex-column(v.$space-1);
+
+  align-items: flex-start;
+
+  // ⚠️ The rule and the space it needs arrive together, and only when there is
+  // a list above to separate from. See the template comment.
+  &--ruled {
+    padding-top: v.$space-3;
+    border-top: var(--jp-rule-width) solid var(--jp-rule);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// WHERE YOU LIVE — its own group inside the salary card
+// -----------------------------------------------------------------------------
+.address {
+  @include m.flex-column(v.$space-3);
+}
+
+// -----------------------------------------------------------------------------
 // EXPERIENCE
 // -----------------------------------------------------------------------------
 .experience__total {
@@ -284,6 +352,18 @@
   }
 
   .languages__level { flex: 1 0 100%; }
+
+  // 🔴 375px: the row stacks and Remove goes under its own fields, full width.
+  // Left as a row it would have squeezed the comboboxes to about half the
+  // screen — and this section is filled in on a phone more often than not.
+  .places__row {
+    flex-direction: column;
+    gap: v.$space-2;
+  }
+
+  .places__actions {
+    align-self: flex-end;
+  }
 
   .timeline__item {
     flex-direction: column;

@@ -93,11 +93,24 @@
           <!--
             ⚠️ SR-3 (G27): THIS ONE STAYS A PLAIN <select>, DELIBERATELY.
 
-            Gender is a three-row master with "Prefer not to say" as its empty
-            option. A search box over three options is a worse control than the
-            three options — which is exactly what <ui-combobox>'s `searchFrom`
-            threshold of 8 encodes. The combobox is for the lists you cannot
-            scan, not for every dropdown.
+            Gender is a FOUR-row master — Male, Female, Other, Prefer not to
+            say — so the whole list is visible at once. A search box over four
+            options is a worse control than the four options, which is exactly
+            what <ui-combobox>'s `searchFrom` threshold of 8 encodes. The
+            combobox is for the lists you cannot scan, not for every dropdown.
+
+            🔴 THE EMPTY OPTION NO LONGER SAYS "PREFER NOT TO SAY", AND THAT
+            WAS A REAL BUG. The master's own row 4 (NOT_DISCLOSED) is called
+            "Prefer not to say", so this dropdown printed that sentence TWICE —
+            once for null and once for the row — and the two mean different
+            things: nobody asked yet, versus they were asked and declined.
+            Picking the wrong one of two identical labels is precisely the
+            confusion P1 removed from the address fields, in a control small
+            enough that nobody thought to look.
+
+            The comment this replaces said the master had three rows. It has
+            four; 03_seed/005_seed_profile.sql has had all four since it was
+            written. Counted, not remembered.
           -->
           <div class="field">
             <label class="field__label" for="genderId">
@@ -106,7 +119,7 @@
             <select class="form-control" id="genderId"
                     [ngModel]="value('genderId')"
                     (ngModelChange)="set('genderId', $event, 'basics')">
-              <option [ngValue]="null">Prefer not to say</option>
+              <option [ngValue]="null">Choose…</option>
               @for (item of genders(); track item.id) {
                 <option [ngValue]="item.id">{{ item.name }}</option>
               }
@@ -470,24 +483,127 @@
       </div>
 
       <div class="card__body">
-        <ui-multi-select
-          label="States you would work in"
-          itemNoun="state"
-          placeholder="Choose the states"
-          [options]="stateOptions()"
-          [ngModel]="selectedStates()"
-          (ngModelChange)="onStatesChange($event)"
-          helper="The order you pick them is the order of your preference."
-        />
+        <!--
+          🔴 P1. ONE ROW PER PLACE, AND EACH ROW READS DOWNWARDS IN THE NEW
+          ORDER: State -> District -> City/Town -> Tehsil/Sub-tehsil.
+
+          This replaced a single multi-select of states. The old control was
+          the honest answer while there were no town lists (2.47); there are
+          now, so a teacher who wants Sonipat town can say Sonipat town instead
+          of "anywhere in Haryana". A state on its own still means exactly what
+          it did — anywhere in that state — so nothing anybody already saved
+          became narrower or wider.
+
+          ⚠️ THE ROW ORDER IS THE PREFERENCE ORDER, written as preferenceOrder
+          1..n on save. Said once, under the list, rather than per row.
+        -->
+        <ul class="places">
+          @for (place of places(); track place.key) {
+            <li class="places__row">
+              <div class="places__fields form-grid">
+                <ui-combobox
+                  label="State"
+                  placeholderOption="Choose…"
+                  [options]="stateOptions()"
+                  [ngModel]="place.stateId()"
+                  (ngModelChange)="onPlaceStateChange(place, $event)"
+                />
+
+                <!--
+                  🔴 HIDDEN WHEN EMPTY, never disabled-and-empty — the 2.47
+                  contract every geography endpoint is written to honour. The
+                  row degrades to "anywhere in this state" with nothing on
+                  screen looking half-built.
+                -->
+                @if (placeHasDistricts(place)) {
+                  <ui-combobox
+                    label="District"
+                    placeholderOption="Choose…"
+                    [options]="place.districtOptions()"
+                    [ngModel]="place.districtId()"
+                    (ngModelChange)="onPlaceDistrictChange(place, $event)"
+                  />
+                }
+
+                <!--
+                  ⚠️ EVERY TOWN IN THE DISTRICT, not the towns of a tehsil.
+                  The tehsil comes after this now and is optional, so narrowing
+                  here would have made it optional in name only.
+
+                  🔴 THE PLACEHOLDER SAYS "STATE", NOT "DISTRICT", AND THAT IS
+                  THE TRUTH OF THE ROW. `t_app_teacher_preferred_locations`
+                  stores CityId and StateId and has NO DistrictId — correctly,
+                  since a town determines its district. So the district here
+                  narrows the LIST and is never saved: leaving the town empty
+                  saves `cityId: null`, which means anywhere in the STATE, and
+                  it would be a quiet lie to promise the district instead.
+                -->
+                @if (placeHasCities(place)) {
+                  <ui-combobox
+                    label="City or town"
+                    placeholderOption="Anywhere in this state"
+                    [options]="place.cityOptions()"
+                    [ngModel]="place.cityId()"
+                    (ngModelChange)="onPlaceCityChange(place, $event)"
+                  />
+                }
+
+                <!--
+                  SR-1 / P1. The optional extra detail under the town. Shown
+                  only when the chosen town has any — which is NO TOWN TODAY,
+                  because the master call this needs does not exist yet. See
+                  loadTehsilsForCity for the two things that must land.
+
+                  ⚠️ ONE CONTROL FOR BOTH, as the label says. There is no
+                  separate sub-tehsil master and there will not be one: a
+                  person knows the name of their place, not its revenue
+                  classification. Anything finer than this is a village, and a
+                  village is typed, not chosen.
+                -->
+                @if (placeHasTehsils(place)) {
+                  <ui-combobox
+                    label="Tehsil / Sub-tehsil"
+                    placeholderOption="Choose…"
+                    helper="Extra detail under your town. Skip it if you are not sure — nothing depends on it."
+                    [options]="place.tehsilOptions()"
+                    [ngModel]="place.tehsilId()"
+                    (ngModelChange)="onPlaceTehsilChange(place, $event)"
+                  />
+                }
+              </div>
+
+              <div class="places__actions">
+                <ui-button size="sm" variant="ghost" (click)="removePlace(place)">Remove</ui-button>
+              </div>
+            </li>
+          }
+        </ul>
 
         <!--
-          ⚠️ States only, and said plainly. The city dataset has not been
-          imported (2.47), so "anywhere in this state" is the preference the
-          system can hold — and it is a real one, not a placeholder.
+          ⚠️ THE RULE ABOVE THIS IS CONDITIONAL, so it cannot dangle. Remove
+          every row and the list is empty — a border-top here would then be a
+          line under nothing, which is the same "nothing looks broken" rule the
+          hidden comboboxes above follow.
+        -->
+        <div class="places__add" [class.places__add--ruled]="places().length > 0">
+          <ui-button variant="ghost" (click)="addPlace()">
+            {{ places().length === 0 ? 'Add a place' : 'Add another place' }}
+          </ui-button>
+          <span class="field__helper">
+            The order you list them in is the order of your preference.
+          </span>
+        </div>
+
+        <!--
+          ⚠️ Said plainly, because "state only" looks like an unfinished answer
+          and is not one. A location with no town means anywhere in that state —
+          a real preference (2.47), and the right one for somebody willing to
+          move.
         -->
         <p class="note">
-          We are still building the city lists for India. For now this is
-          state-wide, and you can narrow it down later.
+          A place with no town means anywhere in that state. Villages are not
+          lists you can scroll — pick the nearest town and schools nearby will
+          still find you.
         </p>
       </div>
 
@@ -539,24 +655,79 @@
                    [ngModel]="value('currentSchool')"
                    (ngModelChange)="set('currentSchool', $event, 'salary')" />
           </div>
+        </div>
+
+        <!--==================================================================
+          WHERE YOU LIVE — P1's order, in its own grid
+
+          🔴 ITS OWN `.form-grid`, NOT THE SALARY ONE. Three controls that
+          cascade have to read as a sequence; interleaved with "From", "To" and
+          "Where you teach now" in a two-column grid, State would have sat
+          beside a rupee figure and District underneath it, which is not a
+          chain anybody can follow.
+
+          ⚠️ STILL THE 'salary' SAVE SECTION. These are columns on the profile
+          row, and this card's one Save button sends the whole row (the
+          RowVersion contract at the top of the component). Giving the address
+          its own section would have meant a second save of the same row.
+        ===================================================================-->
+        <div class="address">
+          <p class="text-section-title">Where you live</p>
 
           <!--
-            🔴 SR-3 (G27): GEOGRAPHY IS A COMBOBOX. The state list is on its
-            way to every state in India (SR-1 seeded Haryana's districts,
-            tehsils and towns first), and scrolling for your own state is the
-            kind of small tax that stops a profile being finished.
+            🔴 SR-3 (G27): GEOGRAPHY IS A COMBOBOX, ALL THREE OF THEM. SR-1
+            seeded 143 Haryana towns and every other state's districts; a
+            native <select> over that is a list you can only use if you
+            already know where your own answer falls alphabetically.
 
-            ⚠️ The word "Optional" is NOT written here any more — the combobox
+            🔴 P1 ORDER: State -> District -> City/Town. Each one is driven by
+            the one above it, and the town list is the DISTRICT's — see the
+            geography comment in the component for why that is not the
+            administrative order and why it is the right one.
+
+            ⚠️ NO TEHSIL AND NO VILLAGE BOX HERE, AND THAT IS DELIBERATE.
+            `t_app_teachers` has only CurrentCityId and CurrentStateId —
+            jp_app's 036_alter_address_columns.sql gave TehsilId and
+            AreaOrVillage to schools, to branches and to teacher preferred
+            locations, and deliberately not to the teacher row. A box whose
+            value has nowhere to be stored is a box that eats what somebody
+            typed, so it is absent rather than decorative. If you are here to
+            add one, add the column and the DTO field first.
+
+            ⚠️ The word "Optional" is NOT written on these — the combobox
             prints it itself whenever [required] is absent, and saying it twice
             is worse than saying it once.
           -->
-          <ui-combobox
-            label="Where you live"
-            placeholderOption="Choose…"
-            [options]="stateOptions()"
-            [ngModel]="value('currentStateId')"
-            (ngModelChange)="set('currentStateId', $event, 'salary')"
-          />
+          <div class="form-grid">
+            <ui-combobox
+              label="State"
+              placeholderOption="Choose…"
+              [options]="stateOptions()"
+              [ngModel]="value('currentStateId')"
+              (ngModelChange)="onHomeStateChange($event)"
+            />
+
+            @if (hasHomeDistricts()) {
+              <ui-combobox
+                label="District"
+                placeholderOption="Choose…"
+                [options]="homeDistrictOptions()"
+                [ngModel]="homeDistrictId()"
+                (ngModelChange)="onHomeDistrictChange($event)"
+              />
+            }
+
+            @if (hasHomeCities()) {
+              <ui-combobox
+                label="City or town"
+                placeholderOption="Choose…"
+                helper="The nearest town is close enough — schools search by district too."
+                [options]="homeCityOptions()"
+                [ngModel]="value('currentCityId')"
+                (ngModelChange)="onHomeCityChange($event)"
+              />
+            }
+          </div>
         </div>
       </div>
 

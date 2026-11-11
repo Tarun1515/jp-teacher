@@ -67,6 +67,67 @@ export interface JobBrowseFilter {
 
   /** SR-5. The teacher's class levels, plural. See `subjectIds`. */
   classLevelIds?: number[];
+
+  /**
+   * P4. The teacher's qualification, as a set for the same reason as the two
+   * above — a profile can carry more than one, and the strict match wants all
+   * of them rather than whichever the join happened to return first.
+   */
+  qualificationIds?: number[];
+
+  /**
+   * P5. Which of the three tabs is asking.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 THE TABS ARE QUERIES, NOT A CLIENT-SIDE RE-SORT
+   * ----------------------------------------------------------------------------
+   * "You might like" is not "everything, ordered differently" — it is a
+   * genuinely different predicate (ANY dimension instead of ALL of them) MINUS
+   * what the strict tab already showed. Doing that subtraction here would mean
+   * fetching every job to the browser to find out which ones to hide, so the
+   * page size would stop meaning anything and the count in the tab label would
+   * be a count of what happened to be downloaded.
+   *
+   * ⚠️ OMITTED IS NOT THE SAME AS `matches`. Leaving `mode` out keeps the plain
+   * unfiltered browse that every other caller of this service already relies on
+   * — the saved-jobs screen and the public funnel both call `browse()` with no
+   * mode and must not start receiving a profile-shaped list.
+   */
+  mode?: JobBrowseMode;
+
+  /**
+   * P5. Free-text search over job title and school name, matched on the server.
+   *
+   * ⚠️ A KEYWORD OVERRIDES THE TABS rather than narrowing one. Somebody typing
+   * a school's name is no longer browsing their profile's matches, and a search
+   * that silently stayed inside the current tab would answer "no results" for a
+   * job that plainly exists.
+   */
+  keyword?: string | null;
+}
+
+/**
+ * P5. The three tabs, as the server names them.
+ *
+ * ⚠️ STRINGS, NOT AN ENUM OF NUMBERS. These travel in a query string and show
+ * up in logs and in the browser's address bar; `mode=might-like` is readable by
+ * whoever is debugging it, and `mode=2` is a lookup in somebody's head.
+ */
+export type JobBrowseMode = 'matches' | 'might-like' | 'preferred';
+
+/**
+ * P5. The number of jobs behind each tab.
+ *
+ * 🔴 DERIVED ON EVERY CALL, NEVER STORED. This project already carried a
+ * maintained `ApplicationCount` that drifted from the rows it claimed to count,
+ * and a tab label that disagrees with the list under it is the same bug wearing
+ * a different hat. The server computes these from the same predicates that
+ * build the lists, so the two cannot separate.
+ */
+export interface JobBrowseCounts {
+  matches: number;
+  mightLike: number;
+  preferred: number;
 }
 
 export interface JobBrowseItem {
@@ -302,10 +363,65 @@ export class JobSearchService {
 
     appendAll('subjectIds', filter.subjectIds);
     appendAll('classLevelIds', filter.classLevelIds);
+    appendAll('qualificationIds', filter.qualificationIds);
+
+    /*
+      ⚠️ BOTH ARE OMITTED WHEN ABSENT rather than sent empty. An empty `mode=`
+      is a value the server has to have an opinion about, and a blank `keyword=`
+      would turn every plain browse into a search for nothing.
+    */
+    if (filter.mode) params = params.set('mode', filter.mode);
+
+    const keyword = filter.keyword?.trim();
+    if (keyword) params = params.set('keyword', keyword);
 
     return this.http
       .get<ApiResponse<JobBrowseItem[]>>(this.jobsUrl, { params })
       .pipe(map((r) => ({ rows: r.data ?? [], total: r.totalRecords ?? 0 })));
+  }
+
+  /**
+   * P5. How many jobs each tab holds, for the counts in the tab labels.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 ONE CALL FOR ALL THREE, AND IT TAKES THE SAME FILTER AS `browse`
+   * ----------------------------------------------------------------------------
+   * Three separate count calls would let the three numbers be computed against
+   * three slightly different filters — which is how a tab ends up promising
+   * twelve jobs and showing nine. One request, one filter, one moment in time.
+   *
+   * ⚠️ `mode` IS DELIBERATELY NOT SENT. The counts describe all three tabs, so
+   * sending the tab currently open would be asking "how many are in each tab,
+   * given that we are only looking at this one".
+   *
+   * ⚠️ A FAILED COUNT IS NOT AN ERROR THE TEACHER SHOULD SEE. The labels simply
+   * go back to having no number — the lists themselves still work, and a toast
+   * about a count nobody asked for is noise.
+   */
+  browseCounts(filter: JobBrowseFilter = {}): Observable<JobBrowseCounts> {
+    let params = new HttpParams();
+
+    const set = (key: string, value: number | null | undefined) => {
+      if (value !== null && value !== undefined) params = params.set(key, value);
+    };
+
+    set('employmentTypeId', filter.employmentTypeId);
+    set('stateId', filter.stateId);
+
+    const appendAll = (key: string, values: number[] | undefined) => {
+      for (const value of values ?? []) params = params.append(key, value);
+    };
+
+    appendAll('subjectIds', filter.subjectIds);
+    appendAll('classLevelIds', filter.classLevelIds);
+    appendAll('qualificationIds', filter.qualificationIds);
+
+    const keyword = filter.keyword?.trim();
+    if (keyword) params = params.set('keyword', keyword);
+
+    return this.http
+      .get<ApiResponse<JobBrowseCounts>>(`${this.jobsUrl}/counts`, { params })
+      .pipe(map((r) => r.data ?? { matches: 0, mightLike: 0, preferred: 0 }));
   }
 
   /**

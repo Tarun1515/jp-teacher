@@ -123,3 +123,111 @@
   justify-content: space-between;
   gap: var(--jp-space-3);
 }
+
+/*
+  P5. Apply sits with the card's other action, and the pair is pushed right.
+
+  ⚠️ THE OVERRIDE IS NEEDED BECAUSE `.job__open` ALREADY CLAIMS `margin-left:
+  auto` above, from when it was the only control on the row. Apply is absent
+  once a teacher has applied, so whichever of the two comes first has to be the
+  one that takes the space — hence the sibling rule rather than moving the
+  margin onto a wrapper that would collapse on small screens.
+*/
+.job__apply { margin-left: auto; }
+.job__apply ~ .job__open { margin-left: 0; }
+
+@include m.down(sm) {
+  .job__apply {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/*
+  P5. The keyword box above the tabs.
+
+  ⚠️ A <form> rather than an input with a keyup handler, so Enter submits the
+  way somebody expects and the search runs once per intention instead of once
+  per keystroke.
+*/
+.jobs__search {
+  display: flex;
+  gap: var(--jp-space-2);
+  align-items: center;
+  margin-bottom: var(--jp-space-3);
+
+  .input { flex: 1 1 auto; min-width: 0; }
+}
+
+/*
+  P5. The three tabs.
+
+  Built from buttons with role="tab" rather than links: switching tab is a new
+  server query against the filters in hand, not a different address — putting
+  it in the URL would make the back button replay a list that no longer
+  matches the filters now on screen.
+*/
+.jobs__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--jp-space-1);
+  margin-bottom: var(--jp-space-3);
+  border-bottom: var(--jp-rule-width) solid var(--jp-rule);
+}
+
+.jobs__tab {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: var(--jp-space-2) var(--jp-space-3);
+  font: inherit;
+  color: var(--jp-text-muted);
+  cursor: pointer;
+
+  &:hover { color: var(--jp-text); }
+
+  &--active {
+    color: var(--jp-text);
+    border-bottom-color: var(--jp-primary);
+    font-weight: 600;
+  }
+}
+
+/* P5. The apply sheet's own two lines. */
+.apply-sheet__job { margin: 0 0 var(--jp-space-1); }
+
+.apply-sheet__consent {
+  margin: var(--jp-space-3) 0;
+  color: var(--jp-text-muted);
+}
+
+/*
+  🔴 P4 ADDED A SIXTH CONTROL TO THIS TOOLBAR, AND THE LABELS STARTED TRUNCATING.
+
+  `.page__toolbar__control` is `flex: 0 1 11rem` in the shared layout, and that
+  is deliberate — several dropdowns line up instead of each sizing itself to
+  its longest option, across four apps. It is not the thing to change.
+
+  But a <ui-multi-select> does not show an option, it shows a SUMMARY: "2 class
+  levels selected" needs more than 11rem, and at 1440px it was rendering as
+  "2 class levels select…" — a control that looks broken on the widest screen
+  we have. Qualification joining the row is what tipped it over.
+
+  ⚠️ Only the summary controls get the extra width. Giving it to all six would
+  undo the line-up the shared rule exists for.
+*/
+.page__toolbar__control--summary { flex: 0 1 15rem; }
+
+/*
+  The apply sheet's location line is plain muted text, NOT a `.note`.
+
+  ⚠️ `.note` carries a filled box, which beside a textarea read as a second,
+  empty input — the sheet looked like it was asking for the town rather than
+  telling you where the job is.
+*/
+.apply-sheet__where {
+  margin: 0 0 var(--jp-space-2);
+  color: var(--jp-text-muted);
+  font-size: var(--jp-font-size-sm);
+}

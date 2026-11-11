@@ -6,13 +6,21 @@ import { MasterService, ToastService } from 'jp-shared/core';
 import { Lookup, MASTER_KEYS } from 'jp-shared/models';
 import {
   UiBadgeComponent,
+  UiButtonComponent,
   UiComboboxComponent,
   UiEmptyStateComponent,
+  UiModalComponent,
   UiMultiSelectComponent,
   lookupsToOptions,
 } from 'jp-shared/ui';
 
-import { JobBrowseItem, JobSearchService } from '../../../../core/job-search.service';
+import {
+  JobBrowseCounts,
+  JobBrowseItem,
+  JobBrowseMode,
+  JobSearchService,
+  applyRefusalMessage,
+} from '../../../../core/job-search.service';
 import { TeacherService } from '../../../../core/teacher.service';
 
 const PAGE_SIZE = 12;
@@ -45,8 +53,24 @@ const PAGE_SIZE = 12;
  * ----------------------------------------------------------------------------
  * The bookmark on a card is private to this teacher. It tells the school
  * nothing and unlocks nothing — `fn_TeacherContactUnlocked` does not read
- * `t_app_saved_jobs` (2.56). Applying is the act of consent, and it happens on
- * the job's own page where the consequence can be stated.
+ * `t_app_saved_jobs` (2.56). Applying is the act of consent.
+ *
+ * ⚠️ THIS PARAGRAPH USED TO END "and it happens on the job's own page where
+ * the consequence can be stated". P5 moved the entry point onto the card, and
+ * the clause that mattered came with it: the card opens a sheet that NAMES THE
+ * JOB and states the consequence before anything is sent. What 2.56 protects
+ * is that the consent is informed and deliberate — not which page it is given
+ * on. There is still no bulk apply, and there never will be: one application
+ * is one considered act.
+ *
+ * ----------------------------------------------------------------------------
+ * 🔴 THREE TABS, AND THEY ARE THREE SERVER QUERIES (P5)
+ * ----------------------------------------------------------------------------
+ * "Matches your profile" is the strict match, "You might like" is the loose one
+ * minus the strict, and "Preferred locations" reads the saved locations that
+ * nothing had read until now. The second tab's subtraction happens in SQL — a
+ * client-side version would have to hold every job in the browser to know what
+ * to hide, which would make both the page size and the tab counts fiction.
  */
 @Component({
   selector: 'app-job-browse',
@@ -56,8 +80,10 @@ const PAGE_SIZE = 12;
     DatePipe,
     RouterLink,
     UiBadgeComponent,
+    UiButtonComponent,
     UiComboboxComponent,
     UiEmptyStateComponent,
+    UiModalComponent,
     UiMultiSelectComponent,
   ],
   templateUrl: './job-browse.component.html',
@@ -86,6 +112,7 @@ export class JobBrowseComponent {
   protected readonly designations = signal<Lookup[]>([]);
   protected readonly cities = signal<Lookup[]>([]);
   protected readonly classLevels = signal<Lookup[]>([]);
+  protected readonly qualifications = signal<Lookup[]>([]);
 
   /*
     SR-3 (G27). The two LONG masters as combobox options.
@@ -102,6 +129,8 @@ export class JobBrowseComponent {
   protected readonly subjectOptions = computed(() => lookupsToOptions(this.subjects()));
   protected readonly stateOptions = computed(() => lookupsToOptions(this.states()));
   protected readonly classLevelOptions = computed(() => lookupsToOptions(this.classLevels()));
+  protected readonly qualificationOptions = computed(() => lookupsToOptions(this.qualifications()));
+  protected readonly employmentTypeOptions = computed(() => lookupsToOptions(this.employmentTypes()));
 
   // ---- filters -------------------------------------------------------------
 
@@ -123,6 +152,88 @@ export class JobBrowseComponent {
   protected readonly employmentTypeId = signal<number | null>(null);
   protected readonly stateId = signal<number | null>(null);
 
+  /*
+    P4. QUALIFICATION JOINS THE PRE-FILL.
+
+    ⚠️ A SET ON THE WIRE THOUGH THE PROFILE HOLDS ONE. `TeacherProfile` carries
+    a single `qualificationId`, and this could have been a scalar — but the
+    server takes a table-valued parameter here like every other set filter, and
+    a teacher listing two qualifications is a change to the profile alone if
+    the wire is already plural. The one-element array is the cheap half of that.
+  */
+  protected readonly qualificationIds = signal<number[]>([]);
+
+  // ---- P5: the three tabs ---------------------------------------------------
+
+  /*
+    🔴 THE ACTIVE TAB IS A SERVER QUERY, NOT A VIEW OF ONE RESULT SET.
+
+    Switching tabs re-asks the server. "You might like" is a different
+    predicate (ANY of the teacher's dimensions, MINUS everything the strict tab
+    already returned), and the subtraction cannot be done here without
+    downloading every job to find out what to hide — at which point the page
+    size stops meaning anything and the tab's count counts downloads.
+  */
+  protected readonly mode = signal<JobBrowseMode>('matches');
+
+  /**
+   * How many jobs sit behind each tab.
+   *
+   * ⚠️ NULL UNTIL THE FIRST COUNT ARRIVES, and null again if the count call
+   * fails. The labels then simply carry no number rather than claiming zero —
+   * "Matches your profile (0)" next to a list of twelve jobs is worse than no
+   * number at all.
+   */
+  protected readonly counts = signal<JobBrowseCounts | null>(null);
+
+  // ---- P5: keyword search ---------------------------------------------------
+
+  /**
+   * What the teacher typed, as submitted — NOT as they type.
+   *
+   * ⚠️ TWO SIGNALS ON PURPOSE. `keywordInput` is the box; `keyword` is the
+   * search that is actually running. Binding the request to the box would fire
+   * a query per keystroke and make the back-to-tabs control flicker in and out
+   * of existence while somebody is still typing.
+   */
+  protected readonly keywordInput = signal('');
+  protected readonly keyword = signal('');
+
+  /**
+   * 🔴 A SEARCH REPLACES THE TABS, it does not narrow one.
+   *
+   * Somebody typing a school's name has stopped browsing their profile's
+   * matches. A keyword applied inside the current tab would answer "no
+   * results" for a job that plainly exists, and the teacher has no way to know
+   * the tab was still in force.
+   */
+  protected readonly searching = computed(() => this.keyword().length > 0);
+
+  // ---- P5: applying from the card -------------------------------------------
+
+  /**
+   * The job whose apply sheet is open, or null.
+   *
+   * 🔒 THE SHEET IS 2.56's "CONSEQUENCE STATED", MOVED — NOT DROPPED. Applying
+   * is consent, and until now it could only happen on the job's own page
+   * because that is where the consequence could be written down. The card now
+   * opens a sheet that names the job and says the same thing before anything
+   * is sent, so the guarantee is intact and the extra page-load is not.
+   *
+   * 🔒 ONE JOB AT A TIME, AND NO BULK APPLY. This is a single row, never a
+   * selection — one application is one considered act, and a checkbox column
+   * with "Apply to 12 jobs" would be the exact thing 2.56 forbids.
+   */
+  protected readonly applyTarget = signal<JobBrowseItem | null>(null);
+  protected readonly applyBusy = signal(false);
+  protected readonly applyCoverNote = signal('');
+
+  /** `RESUME_REQUIRED` / `JOB_EXPIRED`, shown inside the sheet. See `confirmApply`. */
+  protected readonly applyRefusal = signal<string | null>(null);
+
+  protected readonly applyResumeMissing = computed(() => this.applyRefusal() === 'RESUME_REQUIRED');
+  protected readonly applyExpired = computed(() => this.applyRefusal() === 'JOB_EXPIRED');
+
   // ---- SR-3: starting from the teacher's own profile ------------------------
 
   /**
@@ -137,16 +248,15 @@ export class JobBrowseComponent {
    */
   protected readonly matchedToProfile = signal(false);
 
-  /** Set when the profile's own filters matched nothing and we widened. */
-  protected readonly widenedAfterNoMatch = signal(false);
-
   /**
-   * 🔴 GUARDS THE ONE-SHOT WIDENING BELOW, so it can never loop.
+   * P5. Whether the three tabs are in force right now.
    *
-   * Cleared the moment it is used. Without it, a profile that matches nothing
-   * and an empty database would retry each other forever.
+   * 🔴 THE TABS ONLY EXIST WHILE THE LIST IS THE PROFILE'S. They are three
+   * views of "work that suits you", so they are meaningless once the teacher
+   * has cleared the filters, taken them over, or typed a search — in each of
+   * those cases the list is theirs and the server gets no mode at all.
    */
-  private profileFallbackPending = false;
+  protected readonly tabsApply = computed(() => this.matchedToProfile() && !this.searching());
 
   constructor() {
     this.masters.get(MASTER_KEYS.subject).subscribe((v) => this.subjects.set(v));
@@ -154,6 +264,7 @@ export class JobBrowseComponent {
     this.masters.get(MASTER_KEYS.state).subscribe((v) => this.states.set(v));
     this.masters.get(MASTER_KEYS.city).subscribe((v) => this.cities.set(v));
     this.masters.get(MASTER_KEYS.classLevel).subscribe((v) => this.classLevels.set(v));
+    this.masters.get(MASTER_KEYS.qualification).subscribe((v) => this.qualifications.set(v));
 
     /*
       ⚠️ Through the SAME MasterService and the same one-hour cache as the four
@@ -219,22 +330,65 @@ export class JobBrowseComponent {
           (a, b) => a.preferenceOrder - b.preferenceOrder,
         )[0];
 
-        const stateId = topLocation?.stateId ?? null;
+        /*
+          🔴 P5. THE STATE IS NO LONGER SENT FROM HERE, AND THAT IS NOT A
+          REGRESSION — IT IS THE ONLY WAY THE THREE TABS CAN BE HONEST.
 
-        if (subjectIds.length === 0 && classLevelIds.length === 0 && stateId === null) {
+          `stateId` is the TOOLBAR's filter, and the server applies it to all
+          three modes. Pre-filling it from the profile would therefore narrow
+          "Preferred locations" to the one state the teacher is trying to look
+          beyond — the tab named after the places they chose would be the tab
+          that ignored them. Worse, the counts take the same filter as the
+          lists, so all three numbers would be computed under a state that only
+          one of the three tabs should ever see.
+
+          So MATCHES resolves its state SERVER-SIDE from the teacher's own
+          `CurrentStateId`, from the token, and this control is left for the
+          teacher's own use.
+
+          ⚠️ IT ALSO CHANGED WHICH STATE "MATCHES" MEANS. It used to be the top
+          preferred location's state — where they want to work. It is now where
+          they live, and the tabs are what makes that right: tab 1 is work near
+          you, tab 3 is the places you asked for. One state could never have
+          said both.
+        */
+        const topLocationState = topLocation?.stateId ?? null;
+
+        /*
+          P4. The profile's qualification joins the pre-fill, as a one-element
+          set — see `qualificationIds`.
+        */
+        const qualificationIds = profile.qualificationId ? [profile.qualificationId] : [];
+
+        if (
+          subjectIds.length === 0
+          && classLevelIds.length === 0
+          && qualificationIds.length === 0
+          && topLocationState === null
+        ) {
+          /*
+            ⚠️ AN EMPTY PROFILE SEES EVERYTHING, AND SEES NO TABS. There is
+            nothing to match against, so "Matches your profile" would be an
+            empty tab that can never fill — which reads as a broken product
+            rather than an unfinished profile.
+          */
           this.load();
+          this.loadCounts();
           return;
         }
 
         this.subjectIds.set(subjectIds);
         this.classLevelIds.set(classLevelIds);
-        this.stateId.set(stateId);
+        this.qualificationIds.set(qualificationIds);
         this.matchedToProfile.set(true);
-        this.profileFallbackPending = true;
 
         this.load();
+        this.loadCounts();
       },
-      error: () => this.load(),
+      error: () => {
+        this.load();
+        this.loadCounts();
+      },
     });
   }
 
@@ -261,12 +415,163 @@ export class JobBrowseComponent {
     this.onFilterChange();
   }
 
-  /** "Show all jobs" — the way out of the pre-filtered list. */
+  /*
+    ⚠️ THE QUALIFICATION FILTER IS VISIBLE, not an invisible part of the match.
+    P4 pre-fills it from the profile, and a filter that narrows the list without
+    appearing in the toolbar is the silent pre-filter this screen's banner
+    exists to prevent — one dimension of it, hidden.
+  */
+  protected onQualificationsChange(values: (string | number)[]): void {
+    this.qualificationIds.set(this.toIds(values));
+    this.onFilterChange();
+  }
+
+  // ---- P5: applying from the card ------------------------------------------
+
+  /**
+   * Open the apply sheet for one job.
+   *
+   * ⚠️ The card is a link to the job; this control inside it is not.
+   */
+  protected openApply(row: JobBrowseItem, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+
+    this.applyTarget.set(row);
+    this.applyCoverNote.set('');
+    this.applyRefusal.set(null);
+  }
+
+  protected closeApply(): void {
+    this.applyTarget.set(null);
+    this.applyCoverNote.set('');
+    this.applyRefusal.set(null);
+  }
+
+  /**
+   * Send the application.
+   *
+   * 🔒 THE SAME CALL AND THE SAME RULES AS THE JOB'S OWN PAGE (2.56). The
+   * resume requirement, the double-tap resolution and the refusal codes all
+   * belong to the server; this is a second entry point to one act, not a
+   * second way of applying.
+   */
+  protected confirmApply(): void {
+    const job = this.applyTarget();
+
+    if (!job) return;
+
+    this.applyBusy.set(true);
+    this.applyRefusal.set(null);
+
+    this.jobs.apply(job.jobId, this.applyCoverNote().trim() || null).subscribe({
+      next: (result) => {
+        this.applyBusy.set(false);
+
+        /*
+          ⚠️ BOTH OUTCOMES ARE SUCCESS. `created: false` with ALREADY_APPLIED is
+          a double-tap resolving to the application they already have — the same
+          reasoning, and the same two sentences, as the detail page.
+        */
+        this.toast.success(
+          result.created
+            ? 'Applied. The school can now see your profile and contact you.'
+            : 'You had already applied to this job — nothing was sent twice.',
+        );
+
+        /*
+          ⚠️ THE ROW IS UPDATED IN PLACE, NOT RE-FETCHED. Re-running the browse
+          would re-page and could move the card the teacher is looking at — and
+          in the "Matches your profile" tab a reload can legitimately return a
+          different set. `hasApplied` is the only thing that changed.
+        */
+        this.rows.update((rows) =>
+          rows.map((r) => (r.jobId === job.jobId ? { ...r, hasApplied: true } : r)),
+        );
+
+        this.closeApply();
+      },
+      error: (err) => {
+        this.applyBusy.set(false);
+
+        const code = err?.error?.code ?? null;
+
+        /*
+          ⚠️ THESE TWO ARE RENDERED INSIDE THE SHEET, not as a toast. Both are
+          things the teacher can act on — one links to the resume, the other
+          says the posting closed — and a toast that scrolls away while the
+          sheet is still open would leave them looking at an Apply button with
+          no explanation.
+        */
+        if (code === 'RESUME_REQUIRED' || code === 'JOB_EXPIRED') {
+          this.applyRefusal.set(code);
+          return;
+        }
+
+        this.toast.error(applyRefusalMessage(code, 'That application could not be sent.'));
+      },
+    });
+  }
+
+  /** "Show all jobs" — the way out of the pre-filtered list, and out of the tabs. */
   protected showAll(): void {
     this.matchedToProfile.set(false);
-    this.widenedAfterNoMatch.set(false);
-    this.profileFallbackPending = false;
     this.clearFilters();
+  }
+
+  // ---- P5: tabs, counts and search -----------------------------------------
+
+  protected setMode(mode: JobBrowseMode): void {
+    if (mode === this.mode()) return;
+
+    this.mode.set(mode);
+    this.page.set(1);
+    this.load();
+  }
+
+  /**
+   * Refresh the three tab counts for the filters currently in force.
+   *
+   * ⚠️ CALLED WHEREVER THE FILTERS MOVE, not on a timer and not per tab. The
+   * counts describe one filter at one moment; refreshing them on a tab switch
+   * instead would let the three numbers drift apart, which is how a tab ends
+   * up promising twelve jobs and showing nine.
+   */
+  protected loadCounts(): void {
+    this.jobs
+      .browseCounts({
+        subjectIds: this.subjectIds(),
+        classLevelIds: this.classLevelIds(),
+        qualificationIds: this.qualificationIds(),
+        employmentTypeId: this.employmentTypeId(),
+        stateId: this.stateId(),
+      })
+      .subscribe({
+        next: (counts) => this.counts.set(counts),
+
+        // No toast: see `counts`. The labels lose their numbers, nothing else.
+        error: () => this.counts.set(null),
+      });
+  }
+
+  protected submitKeyword(): void {
+    const next = this.keywordInput().trim();
+
+    if (next === this.keyword()) return;
+
+    this.keyword.set(next);
+    this.page.set(1);
+    this.load();
+  }
+
+  /** The way back from "Search results" to the tabs. */
+  protected clearKeyword(): void {
+    if (!this.keyword() && !this.keywordInput()) return;
+
+    this.keywordInput.set('');
+    this.keyword.set('');
+    this.page.set(1);
+    this.load();
   }
 
   protected load(): void {
@@ -277,36 +582,43 @@ export class JobBrowseComponent {
       .browse({
         subjectIds: this.subjectIds(),
         classLevelIds: this.classLevelIds(),
+        qualificationIds: this.qualificationIds(),
         employmentTypeId: this.employmentTypeId(),
         stateId: this.stateId(),
+
+        /*
+          ⚠️ NO MODE WHILE SEARCHING. A keyword replaces the tabs (see
+          `searching`), and sending both would answer "no results" for a job
+          that exists but sits in another tab.
+
+          ⚠️ AND NO MODE ONCE THE TEACHER HAS TAKEN THE FILTERS OVER. The tabs
+          describe a profile-shaped list; the moment somebody edits the filters
+          themselves the list is theirs, and a mode still applying underneath
+          would quietly subtract rows they asked for.
+        */
+        mode: this.tabsApply() ? this.mode() : undefined,
+        keyword: this.keyword() || null,
+
         pageNumber: this.page(),
         pageSize: PAGE_SIZE,
       })
       .subscribe({
         next: (result) => {
           /*
-            🔴 THE PROFILE'S FILTERS MATCHED NOTHING — WIDEN ONCE, AND SAY SO.
+            🔴 THE ONE-SHOT WIDENING IS GONE, AND THE TABS ARE WHY.
 
-            An empty screen on arrival is the worst outcome of pre-filling.
-            The teacher never chose these filters, so "no results" reads as
-            "this product has no jobs for me" rather than "nothing matches the
-            two boxes we filled in on your behalf". Falling back to everything
-            and naming what happened turns a dead end into a sentence they can
-            act on.
+            This used to detect an empty profile-matched list and silently
+            clear the filters, because an empty screen on arrival reads as
+            "this product has no jobs for me". That reasoning was right and the
+            remedy is now better: an empty "Matches your profile" sits beside
+            "You might like (9)" with the count visible, so the way out is a
+            thing the teacher chooses rather than something the screen does to
+            them while they are reading it.
 
-            ⚠️ ONCE, AND THE FLAG IS CLEARED BEFORE THE RETRY — so a genuinely
-            empty result set stops here instead of two states calling each
-            other forever.
+            ⚠️ AND THE OLD BEHAVIOUR WOULD NOW BE A BUG. Clearing the filters
+            under somebody who just clicked a tab would move them out of the tab
+            they picked, with the banner still explaining a state they left.
           */
-          if (this.profileFallbackPending && result.total === 0) {
-            this.profileFallbackPending = false;
-            this.widenedAfterNoMatch.set(true);
-            this.clearFilters();
-            return;
-          }
-
-          this.profileFallbackPending = false;
-
           this.rows.set(result.rows);
           this.total.set(result.total);
           this.loading.set(false);
@@ -328,33 +640,30 @@ export class JobBrowseComponent {
       choice the person just made themselves.
     */
     this.matchedToProfile.set(false);
-    this.widenedAfterNoMatch.set(false);
-    this.profileFallbackPending = false;
 
     this.page.set(1);
     this.load();
+    this.loadCounts();
   }
 
   protected clearFilters(): void {
-    /*
-      ⚠️ No filters means the list is not the profile's any more, whoever
-      cleared them. `widenedAfterNoMatch` is deliberately NOT reset here — the
-      widening path sets it immediately before calling this, and that message
-      has to survive the call that causes it.
-    */
+    // ⚠️ No filters means the list is not the profile's any more, whoever cleared them.
     this.matchedToProfile.set(false);
 
     this.subjectIds.set([]);
     this.classLevelIds.set([]);
+    this.qualificationIds.set([]);
     this.employmentTypeId.set(null);
     this.stateId.set(null);
     this.page.set(1);
     this.load();
+    this.loadCounts();
   }
 
   protected readonly hasFilters = computed(
     () => this.subjectIds().length > 0
       || this.classLevelIds().length > 0
+      || this.qualificationIds().length > 0
       || this.employmentTypeId() !== null
       || this.stateId() !== null,
   );
