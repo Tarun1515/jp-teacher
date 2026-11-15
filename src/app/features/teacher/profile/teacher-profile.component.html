@@ -818,6 +818,143 @@
               </p>
             </div>
           </div>
+
+          <!--==============================================================
+            D1 — YOUR PLACE ON THE MAP
+
+            🔴 WHY THERE IS A MAP HERE AT ALL. The job list puts the nearest
+            postings first, and that is measured between this pin and the
+            school's campus pin. Until 041 the teacher side of that
+            measurement did not exist: the finest thing the product knew
+            about where somebody lives was the town.
+
+            🔴 AND THE ORDER THIS WAS BUILT IN, BECAUSE IT IS THE LESSON OF
+            THE PASS ABOVE. 041 added the two columns and the geography
+            column over them; USP_UpdateTeacherProfile learned to write them
+            and USP_GetTeacherProfile to return them; the DTO and the
+            repository carried them — and THEN this control was drawn. The
+            tehsil picker on the preferred-location rows was added the other
+            way round and spent days accepting choices it threw away behind
+            a "Saved" message. A control is drawn after its storage, never
+            before.
+
+            🔒 OPTIONAL, AND THE COPY SAYS WHAT IT IS FOR AND WHAT HAPPENS
+            WITHOUT IT. No pin means the job list comes back newest-first,
+            exactly as it always has — nothing is withheld and nothing is
+            gated. There is NO fallback to the centre of the chosen town: a
+            town centre is not where anybody lives, and "~4 km away"
+            measured from one would be a figure the product states as fact
+            and cannot support.
+          ===============================================================-->
+          <div class="pin">
+            <p class="text-section-title">Your place on the map</p>
+
+            <p class="field__helper">
+              Optional. Drop a pin roughly where you live and jobs near you
+              move to the top of your list — the school is only ever told how
+              far away you are, never where. Skip it and your list stays
+              newest-first.
+            </p>
+
+            <!--
+              ⚠️ NO [anchorLatitude] / [anchorLongitude], AND SO NO "RESET TO
+              ADDRESS LOCATION" BUTTON. The campus dialog has an anchor
+              because a school's address is geocoded and the admin queue is
+              measured between the two points. A teacher's home address is
+              not geocoded — 039 deliberately refused them AddressLine1/2 and
+              a pincode — so there is no second point to reset to, and the
+              control hides the button by itself when the anchor is absent
+              (`showReset`). Passing a half-known anchor would give them a
+              button that resets to nothing.
+            -->
+            <ui-map-picker
+              label="Your home pin"
+              [heightPx]="300"
+              [latitude]="value('latitude')"
+              [longitude]="value('longitude')"
+              (picked)="onPinPicked($event)"
+            />
+
+            <!--
+              🔴 THE TWO BOXES ARE THE KEYBOARD PATH, NOT A REDUNDANT EXTRA.
+              <ui-map-picker>'s own header: dragging a marker is a pointer
+              gesture, Leaflet has no keyboard equivalent, the marker is
+              deliberately not a tab stop, and "the keyboard path to a
+              precise coordinate is the host's number inputs". Without these
+              the map is mouse-only.
+
+              ⚠️ step="0.000001" BECAUSE THE COLUMN IS decimal(9,6) — about
+              11 cm. It also stops the browser's spinner stepping by whole
+              degrees, which would move somebody 111 km per click.
+            -->
+            <div class="form-grid">
+              <div class="field">
+                <label class="field__label" for="home-latitude">Latitude</label>
+
+                <input
+                  class="form-control"
+                  id="home-latitude"
+                  type="number"
+                  inputmode="decimal"
+                  min="-90"
+                  max="90"
+                  step="0.000001"
+                  placeholder="29.150000"
+                  [ngModel]="value('latitude')"
+                  (ngModelChange)="onPinLatitudeChange($event)"
+                />
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="home-longitude">Longitude</label>
+
+                <input
+                  class="form-control"
+                  id="home-longitude"
+                  type="number"
+                  inputmode="decimal"
+                  min="-180"
+                  max="180"
+                  step="0.000001"
+                  placeholder="75.720000"
+                  [ngModel]="value('longitude')"
+                  (ngModelChange)="onPinLongitudeChange($event)"
+                />
+              </div>
+            </div>
+
+            <!--
+              ⚠️ A SENTENCE, NOT A BLOCKED SAVE. Half a pin is what entering
+              one by hand looks like halfway through, so this says what is
+              missing while it is true and lets them finish. The server
+              refuses the pair outright if they press Save anyway, and names
+              which half — so nothing can be stored in this state.
+            -->
+            @if (pinHalfEntered()) {
+              <p class="note" role="alert">
+                A point needs both numbers. Add the other one, or clear either
+                box to remove the pin.
+              </p>
+            }
+
+            <!--
+              🔒 REMOVING IT IS A CONTROL, BECAUSE THE MAP CANNOT UNDO ITSELF.
+              The picker only ever emits a point — no gesture means "no pin" —
+              so without this a teacher who placed one could never take it
+              back. It is the most sensitive field on this profile; "stop
+              storing where I live" has to be one click, and it is not hidden
+              behind a confirmation because nothing is lost that a single
+              click cannot restore.
+
+              ⚠️ ONLY WHEN THERE IS SOMETHING TO REMOVE. A button that clears
+              nothing is a button that lies about the state of the form.
+            -->
+            @if (value('latitude') !== null || value('longitude') !== null) {
+              <ui-button variant="ghost" size="sm" (click)="clearPin()">
+                Remove my pin
+              </ui-button>
+            }
+          </div>
         </div>
       </div>
 

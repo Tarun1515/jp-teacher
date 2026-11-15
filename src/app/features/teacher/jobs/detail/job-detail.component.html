@@ -93,6 +93,28 @@
                 <dd>{{ names(classLevels(), job.classLevelIds) }}</dd>
               </div>
 
+              <!--
+                🔴 D1. ABSENT, NOT DASHED, WHEN THERE IS NO DISTANCE.
+
+                `distanceLabel` is null unless BOTH pins exist — the teacher
+                has pinned themselves on their profile and this campus has a
+                pin — and the whole row goes with it. Every other fact in this
+                list is always knowable for a published job; this one is only
+                knowable for a teacher who told us where they are, so an empty
+                <dd> here would read as "zero away" or "we lost it".
+
+                🔒 And nothing guesses: there is no fallback to the centre of
+                the town, at any layer. A measured 4 km and a centroid's 4 km
+                look identical once printed, which is exactly why one of them
+                is never printed.
+              -->
+              @if (distanceLabel(job); as away) {
+                <div class="facts__item">
+                  <dt>Distance from you</dt>
+                  <dd>{{ away }}</dd>
+                </div>
+              }
+
               @if (job.workingDays) {
                 <div class="facts__item">
                   <dt>Working days</dt>

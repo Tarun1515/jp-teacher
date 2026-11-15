@@ -168,6 +168,19 @@
 }
 
 // -----------------------------------------------------------------------------
+// D1 — YOUR PLACE ON THE MAP
+//
+// ⚠️ ITS OWN GROUP RATHER THAN MORE ROWS IN `.address`, and the reason is the
+// same one that gave the address its own grid: a map, two number boxes and a
+// Remove button are a self-contained answer to one question. Dropped into the
+// address cascade they would sit between "Tehsil" and "Area or village" and
+// break a chain the eye reads top to bottom.
+// -----------------------------------------------------------------------------
+.pin {
+  @include m.flex-column(v.$space-3);
+}
+
+// -----------------------------------------------------------------------------
 // EXPERIENCE
 // -----------------------------------------------------------------------------
 .experience__total {

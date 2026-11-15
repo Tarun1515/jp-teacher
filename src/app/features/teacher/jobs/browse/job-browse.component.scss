@@ -63,6 +63,19 @@
   color: var(--jp-text);
 }
 
+// D1. "~4 km away".
+//
+// ⚠️ MUTED AND SMALL, LIKE THE OTHER META LINES, NOT A BADGE. These cards are
+// already ordered nearest-first by the server on the two recommendation tabs,
+// so the distance is CONTEXT for a position the list has taken — not a flag
+// competing with the title and the salary. A coloured chip here would make
+// every card in a sorted list shout the same thing.
+.job__distance {
+  margin: 0;
+  font-size: var(--jp-font-size-xs);
+  color: var(--jp-text-muted);
+}
+
 // The bookmark. Quiet until it is on, because most cards will not be saved and
 // a grid of filled stars would read as a status rather than a choice.
 .job__save {

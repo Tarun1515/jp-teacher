@@ -5,7 +5,9 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MasterService, ToastService } from 'jp-shared/core';
 import { TeacherService } from '../../../../core/teacher.service';
 import { Lookup, MASTER_KEYS } from 'jp-shared/models';
-import { UiBadgeComponent, UiEmptyStateComponent } from 'jp-shared/ui';
+// D1. `distanceAwayLabel` is jp-shared's — the one place this product words a
+// distance. See `distanceLabel` below.
+import { UiBadgeComponent, UiEmptyStateComponent, distanceAwayLabel } from 'jp-shared/ui';
 
 import {
   JobForTeacher,
@@ -331,6 +333,22 @@ export class JobDetailComponent {
     const state = this.name(this.states(), job.stateId ?? job.branchStateId);
 
     return [city, state].filter((x) => x && x !== '—').join(', ') || job.branchName;
+  }
+
+  /**
+   * D1. "~4 km away", or null when there is no distance to state.
+   *
+   * 🔴 THE SAME FACT THE CARD SHOWS, FROM THE SAME SERVER FIELD AND THE SAME
+   * FORMATTER. `USP_GetJobForTeacher` projects `DistanceMetres` exactly as the
+   * browse does, so somebody who clicked a job because it was near them is not
+   * then shown a page that has forgotten.
+   *
+   * ⚠️ NULL WHENEVER EITHER PIN IS MISSING — the teacher's (profile) or the
+   * campus's — and the row is then absent rather than dashed. 🔒 No
+   * city-centroid guess sits behind it at any layer.
+   */
+  protected distanceLabel(job: JobForTeacher): string | null {
+    return distanceAwayLabel(job.distanceMetres);
   }
 
   protected salaryLabel(job: JobForTeacher): string {

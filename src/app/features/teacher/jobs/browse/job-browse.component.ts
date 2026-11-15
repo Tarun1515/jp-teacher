@@ -11,6 +11,8 @@ import {
   UiEmptyStateComponent,
   UiModalComponent,
   UiMultiSelectComponent,
+  // D1. The one place this product words a distance — see `distanceLabel`.
+  distanceAwayLabel,
   lookupsToOptions,
 } from 'jp-shared/ui';
 
@@ -752,6 +754,34 @@ export class JobBrowseComponent {
         : fmt((row.salaryMin ?? row.salaryMax) as number);
 
     return row.isSalaryNegotiable ? `${range} · negotiable` : range;
+  }
+
+  /**
+   * D1. "~4 km away", or nothing at all.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 ONE LINE, AND THE DELEGATION IS THE POINT
+   * ----------------------------------------------------------------------------
+   * `distanceAwayLabel` is jp-shared's, next to the project's other distance
+   * reasoning, and it returns null for null. So "only when both pins exist" is
+   * not a condition this template has to restate — it IS `distanceMetres !==
+   * null`, decided by the server, which sends null whenever either the teacher
+   * or the campus has no pin. 🔒 There is no city-centroid fallback at any
+   * point in that chain and nothing here may add one.
+   *
+   * ⚠️ NO LOCAL ROUNDING, NO LOCAL WORDING, NO `?? '—'`. A dash in a distance
+   * slot reads as "zero away" at a glance, and a second copy of the rounding
+   * rule is a second wording of the same fact — which is exactly how the
+   * address-cascade comments describe this product acquiring three of
+   * everything.
+   *
+   * ⚠️ RETURNS null RATHER THAN '' so the template's `@if` reads as a presence
+   * test, matching `experienceLabel`'s empty-string convention being the only
+   * other shape on this card. (That one predates D1 and is left alone; a
+   * nullable string is the better shape and new code uses it.)
+   */
+  protected distanceLabel(row: JobBrowseItem): string | null {
+    return distanceAwayLabel(row.distanceMetres);
   }
 
   protected experienceLabel(row: JobBrowseItem): string {

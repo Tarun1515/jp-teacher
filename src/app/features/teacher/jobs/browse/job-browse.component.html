@@ -265,6 +265,39 @@
               · {{ locationLabel(row) }}
             </p>
 
+            <!--
+              🔴 D1. "~4 km away" — AND ONLY WHEN THERE IS A DISTANCE TO STATE.
+
+              `distanceLabel` is null unless BOTH pins exist: the teacher has
+              pinned themselves on their profile AND this job's campus has a
+              pin. The server decides that — it sends `distanceMetres: null`
+              otherwise — so there is nothing to compute here and nothing to
+              fall back to.
+
+              🔒 NO PLACEHOLDER IN THE ABSENT CASE. No "Distance unknown", no
+              dash, no "0 km". A card that says nothing about distance is
+              correct and complete; a card that puts a figure in this slot for
+              a job we cannot measure is making a claim. And there is NO
+              city-centroid guess behind it at any layer — `m_mdm_city` carries
+              a town centre and the browse deliberately does not read it,
+              because a centroid is not where anybody lives and the teacher
+              could not tell that number from a measured one.
+
+              ⚠️ IT RENDERS ON EVERY TAB, not only the two the server reorders.
+              Knowing a job is 4 km away is useful in Preferred and in a keyword
+              search too; hiding a fact we have because the sort is different
+              would be withholding it.
+
+              ⚠️ ITS OWN LINE, NOT A `·` SEGMENT ON THE META ROW ABOVE. That row
+              is three facts that are always present, and appending a
+              sometimes-absent fourth would leave a trailing separator — or
+              need the separator moved inside the condition, which is how one
+              `@if` becomes two.
+            -->
+            @if (distanceLabel(row); as away) {
+              <p class="job__distance">{{ away }}</p>
+            }
+
             <p class="job__salary">{{ salaryLabel(row) }}</p>
 
             @if (experienceLabel(row)) {

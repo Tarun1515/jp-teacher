@@ -22,6 +22,8 @@ import {
   UiBadgeComponent,
   UiButtonComponent,
   UiComboboxComponent,
+  UiMapPickerComponent,
+  UiMapPoint,
   UiModalComponent,
   UiMultiSelectComponent,
   UiSelectOption,
@@ -174,6 +176,16 @@ let nextPlaceKey = 0;
     UiBadgeComponent,
     UiButtonComponent,
     UiComboboxComponent,
+    /*
+      D1. The map pin. jp-shared's, the same control the school registration
+      step and the campus dialog use.
+
+      ⚠️ Leaflet is NOT in this app's eager graph because of it. The component
+      type-only-imports Leaflet and loads it dynamically, which is why four apps
+      can share one picker without every page downloading a map library — see
+      its own header.
+    */
+    UiMapPickerComponent,
     UiModalComponent,
     UiMultiSelectComponent,
     ProfileMeterComponent,
@@ -530,6 +542,20 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       currentDistrictId: profile.currentDistrictId,
       currentTehsilId: profile.currentTehsilId,
       currentAreaOrVillage: profile.currentAreaOrVillage,
+
+      /*
+        🔴 D1. SEEDED HERE SO EVERY SECTION SAVE CARRIES IT.
+
+        Nine Save buttons PUT this one draft, and the server writes the pin
+        plainly rather than coalescing — so a draft missing these two would send
+        nulls and DELETE somebody's pin the next time they edited their About
+        Me. That is the tehsil bug inverted: there, a control had no column;
+        here, a column would have had no value. Both are a save that quietly
+        means something other than what the screen said.
+      */
+      latitude: profile.latitude,
+      longitude: profile.longitude,
+
       aboutMe: profile.aboutMe,
     });
 
@@ -1034,6 +1060,145 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   protected onHomeAreaChange(value: string): void {
     this.set('currentAreaOrVillage', value.trim() === '' ? null : value, 'salary');
   }
+
+  // ---- D1: the map pin ------------------------------------------------------
+  //
+  // ============================================================================
+  // 🔴 WHY THIS CONTROL EXISTS AT ALL, AND WHAT IT IS NOT
+  // ============================================================================
+  // The job browse ranks nearby postings first. That is an `STDistance` between
+  // two points, and until 041 the teacher side of that line did not exist — the
+  // finest thing the product knew about where somebody lives was
+  // `currentCityId`, which is a town.
+  //
+  // 🔒 AND THERE IS NO GUESS BEHIND IT. `m_mdm_city` and `m_mdm_tehsil` both
+  // carry a centroid, so filling a missing pin from the centre of the saved town
+  // would have made the feature work for everybody without asking anyone. It is
+  // refused at every layer: a town centre is not where anybody lives, and once a
+  // guess is "~4 km away" on a card the teacher cannot tell it from a
+  // measurement. No pin means no distance, no label, and the job list in plain
+  // date order — which is also why this control is an INVITATION and never a
+  // requirement.
+  //
+  // ⚠️ IT IS NOT THE PREFERRED-LOCATIONS LIST, and it does not replace it. That
+  // list is "states and towns I would work in" — a set of named places, a
+  // different question. A teacher may name three states and pin one home.
+  //
+  // ⚠️ IT DOES NOT MOVE THE COMPLETION PERCENTAGE.
+  // `USP_RecalculateTeacherProfile`'s eight weights sum to 100 and are weighted
+  // toward what gets somebody hired; adding a ninth would have renumbered every
+  // teacher's percentage overnight for a field that helps us sort a list rather
+  // than helping a school decide. If the product ever wants it counted, that is
+  // a deliberate reweighting of all eight, in that procedure, not a tenth
+  // percent smuggled in here.
+
+  /**
+   * The pin moved on the map.
+   *
+   * 🔴 ROUNDED, NEVER VALIDATED. Leaflet reports a click at full double
+   * precision — 28.45949658203125 — and that is correct arithmetic the teacher
+   * did not do. Judging it against "six decimal places" would mean somebody
+   * drags a pin and is told their coordinates are invalid by a rule they have
+   * no way to satisfy and did not trigger. What a PERSON types is a different
+   * case (see `onPinLatitudeChange`); jp-school's `core/coordinates.ts` argues
+   * the split at length.
+   *
+   * ⚠️ AND THE ROUNDING IS WHAT STOPS THE PICKER FIGHTING THE DRAFT.
+   * `<ui-map-picker>` treats the host as the source of truth and re-reads the
+   * pair it is given; the column is `decimal(9,6)`, so an unrounded value would
+   * come back from the server a few bits different from the one sent. The
+   * control compares with a tolerance precisely to survive that — rounding here
+   * means it never has to.
+   *
+   * ⚠️ BOTH AXES, ALWAYS. The map only ever emits a pair, so this path cannot
+   * produce half a pin.
+   */
+  protected onPinPicked(point: UiMapPoint): void {
+    this.set('latitude', roundCoordinate(point.latitude), 'salary');
+    this.set('longitude', roundCoordinate(point.longitude), 'salary');
+  }
+
+  /**
+   * A coordinate typed by hand.
+   *
+   * 🔴 THE KEYBOARD PATH, AND IT IS NOT OPTIONAL POLISH. `<ui-map-picker>`'s
+   * own header is explicit: dragging a marker is a pointer gesture and Leaflet
+   * offers no keyboard equivalent, so the marker is deliberately not a tab stop
+   * and "the keyboard path to a precise coordinate is the host's number
+   * inputs". Ship the map without these two boxes and the control becomes
+   * mouse-only.
+   *
+   * ⚠️ AN EMPTIED BOX CLEARS THE WHOLE PIN, both axes. Half a pin is a point on
+   * the Greenwich meridian — in the Atlantic, for anything in India — and the
+   * server refuses the pair outright. Clearing one number is how somebody says
+   * "forget where I am", so it is read that way rather than being left as a
+   * state Save would reject.
+   *
+   * ⚠️ A TYPED VALUE IS PASSED THROUGH UNROUNDED. The server judges it and its
+   * refusal names the likely cause (the two boxes swapped), which is a better
+   * sentence than anything this component could produce from a number alone —
+   * and the shared error interceptor already puts a VALIDATION_FAILED message on
+   * screen.
+   */
+  protected onPinLatitudeChange(value: string | number | null): void {
+    const parsed = parseCoordinate(value);
+
+    if (parsed === null) {
+      this.clearPin();
+
+      return;
+    }
+
+    this.set('latitude', parsed, 'salary');
+  }
+
+  /** @see onPinLatitudeChange — the same rules, the other axis. */
+  protected onPinLongitudeChange(value: string | number | null): void {
+    const parsed = parseCoordinate(value);
+
+    if (parsed === null) {
+      this.clearPin();
+
+      return;
+    }
+
+    this.set('longitude', parsed, 'salary');
+  }
+
+  /**
+   * Remove the pin.
+   *
+   * 🔴 AN EXPLICIT CONTROL, BECAUSE THE MAP CANNOT UNDO ITSELF. `(picked)` only
+   * ever emits a point — there is no gesture that means "no pin" — so without
+   * this button a teacher who placed one could never take it back, and the
+   * procedure's ability to store NULL would be unreachable from the only screen
+   * that writes it.
+   *
+   * 🔒 AND IT IS A PRIVACY CONTROL, not a convenience. The pair is the most
+   * sensitive thing on this row; "stop storing where I live" has to be
+   * answerable in one click.
+   */
+  protected clearPin(): void {
+    this.set('latitude', null, 'salary');
+    this.set('longitude', null, 'salary');
+  }
+
+  /**
+   * Exactly one of the two numbers is filled in.
+   *
+   * ⚠️ IT WARNS, IT DOES NOT BLOCK. The only way to reach this state is to type
+   * one number and not the other yet, which is what entering a pin by hand looks
+   * like halfway through. Disabling Save over it would fight somebody who is
+   * still typing; saying nothing would let them press Save and meet a server
+   * refusal they could have been spared. So: a sentence, on the form, while it
+   * is true.
+   */
+  protected readonly pinHalfEntered = computed(() => {
+    const draft = this.draft();
+    if (draft === null) return false;
+
+    return (draft.latitude === null) !== (draft.longitude === null);
+  });
 
   // =========================================================================
   // THE ADDRESS SEARCH — WHAT THIS SCREEN DOES WITH AN ANSWER FROM IT
@@ -2010,4 +2175,68 @@ function monthLabel(date: string | null): string {
 /** The response code, never the message text (2.12). */
 function codeOf(error: unknown): string | null {
   return (error as { error?: { code?: string } } | null)?.error?.code ?? null;
+}
+
+/*==============================================================================
+  D1 — THE TWO COORDINATE HELPERS
+
+  ⚠️ jp-school ALREADY HAS A FULLER VERSION OF THIS, AND THIS IS NOT IT BY
+  ACCIDENT. `jp-school/src/app/core/coordinates.ts` carries bounds, a typed-vs-
+  produced validator, three refusal sentences and a pair check, because the
+  school side has THREE screens that edit a pin (registration, the campus
+  dialog, the profile read view) plus a far-from-the-address confirmation and a
+  geocoded anchor to measure against.
+
+  This screen has one map, two boxes and no anchor, and the server's refusals
+  already name what is wrong — including the swapped-boxes case, which the
+  shared error interceptor toasts. So what is needed here is the ROUNDER and a
+  parse, and that is what is here.
+
+  🔴 THE RIGHT NEXT MOVE IS TO PROMOTE jp-school's FILE TO jp-shared, NOT TO
+  COPY IT. Saying so here rather than quietly duplicating it: a third copy of
+  the bounds and the wordings is how this product ends up with three rules that
+  disagree, which is the lesson the address-cascade comments keep recording. It
+  was deliberately not done inside D1 — moving a file jp-school imports from
+  four places is a change jp-school has to be re-verified for, and it is not
+  this task's.
+==============================================================================*/
+
+/** Six decimal places — about 11 cm, and what `decimal(9,6)` holds. */
+const COORDINATE_DECIMALS = 6;
+
+/**
+ * Rounds a coordinate THE PRODUCT PRODUCED to what the column stores.
+ *
+ * 🔴 FOR MACHINE VALUES ONLY — a Leaflet click, a geocoded point. Never for
+ * something a person typed: silently "fixing" typed digits hides the mistake
+ * instead of naming it. jp-school's file argues the asymmetry in full.
+ *
+ * ⚠️ NULL PASSES THROUGH AS NULL, and there is no "0 as a default". Zero is a
+ * real latitude and a real longitude, and the difference between "no pin" and
+ * "a pin in the Gulf of Guinea" has to survive this function — it is the
+ * difference the whole feature branches on.
+ */
+function roundCoordinate(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+
+  const scale = 10 ** COORDINATE_DECIMALS;
+
+  return Math.round(value * scale) / scale;
+}
+
+/**
+ * What an `<input type="number">` handed over, as a number or null.
+ *
+ * ⚠️ AN EMPTIED NUMBER INPUT GIVES BACK THE EMPTY STRING, not null, and
+ * `Number('')` is 0 — so the obvious spelling would turn "I cleared the box"
+ * into "I live on the equator at the prime meridian". Both the empty string and
+ * a non-numeric paste come back as null here, and the caller reads null as
+ * "remove the pin".
+ */
+function parseCoordinate(value: string | number | null): number | null {
+  if (value === null || value === undefined || value === '') return null;
+
+  const parsed = Number(value);
+
+  return Number.isFinite(parsed) ? parsed : null;
 }

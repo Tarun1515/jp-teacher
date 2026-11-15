@@ -169,6 +169,30 @@ export interface JobBrowseItem {
   hasApplied: boolean;
   isSaved: boolean;
 
+  /**
+   * D1. Straight-line metres from the teacher's own map pin to this job's
+   * campus pin — the number behind "~4 km away".
+   *
+   * 🔴 NULL WHENEVER EITHER PIN IS MISSING, and that is the entire rule for
+   * whether the label renders. No teacher pin, or no campus pin, means no
+   * distance: the card says nothing about distance rather than guessing. 🔒
+   * THERE IS NO CITY-CENTROID FALLBACK anywhere in the chain — the masters
+   * carry a town centre and the server deliberately does not reach for it,
+   * because once a guess is a number on a card the reader cannot tell it from
+   * a measurement.
+   *
+   * ⚠️ FORMAT IT WITH `distanceAwayLabel` FROM jp-shared/ui AND NOWHERE ELSE.
+   * It returns null for null, which is what keeps "both pins exist" from
+   * becoming a second condition every template has to remember. 🔴 Do not
+   * substitute a 0, a dash or "Distance unknown": a card that says nothing is
+   * right, and "0 km away" is wrong in the one way that reads as right.
+   *
+   * ⚠️ PRESENT ON EVERY TAB, while the nearest-first ORDERING is applied by the
+   * server only on Matches and You-might-like. The label is about one card; the
+   * ordering is about a tab.
+   */
+  distanceMetres: number | null;
+
   /** 🔴 Arrives through an alias in the procedure (2.61). */
   isActive: boolean;
 }

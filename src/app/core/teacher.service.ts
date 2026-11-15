@@ -155,6 +155,28 @@ export interface TeacherProfile {
   currentDistrictId: number | null;
   currentTehsilId: number | null;
   currentAreaOrVillage: string | null;
+
+  /*
+    D1. THE MAP PIN — where "nearby jobs first" measures from.
+
+    🔴 NULL IS A REAL AND COMMON STATE, AND THE PRODUCT MUST KEEP SAYING SO.
+    No pin means nobody asked, and the job browse then returns exactly the date
+    order it returned before this feature existed. There is NO fallback to the
+    centroid of `currentCityId` — a town centre is not where anybody lives, and
+    "~4 km away" measured from one is a sentence we would be stating as fact
+    and could not support. The screen offers the map instead of guessing.
+
+    🔒 OWN PROFILE ONLY. These two never appear on a school-facing type; what a
+    school's side of the product sees is a DISTANCE IN METRES on a job card,
+    which cannot be turned back into somebody's front door.
+
+    ⚠️ BOTH OR NEITHER. The server refuses one without the other and names
+    which half is missing — half a pin is a point on the Greenwich meridian,
+    which is in the Atlantic for anything in India.
+  */
+  latitude: number | null;
+  longitude: number | null;
+
   aboutMe: string | null;
   resumePath: string | null;
 
@@ -212,6 +234,25 @@ export interface UpdateTeacherProfileBody {
   currentDistrictId: number | null;
   currentTehsilId: number | null;
   currentAreaOrVillage: string | null;
+
+  /*
+    D1. The map pin.
+
+    🔴 SENT ON EVERY SAVE OF THIS ROW, INCLUDING SAVES THAT HAVE NOTHING TO DO
+    WITH THE MAP. The server writes these two plainly rather than coalescing, so
+    null MEANS "clear the pin" — which is what makes "remove my home
+    coordinates" possible at all, and what makes a forgetful client dangerous.
+
+    ⚠️ This screen has nine Save buttons over ONE profile row and each of them
+    PUTs the whole draft, so the draft is seeded from the GET and these two ride
+    along untouched unless somebody moves the pin. A section save that dropped
+    the field would delete the pin while printing "Saved" — the tehsil bug
+    inverted, and the reason `nearby-jobs.mjs` saves an unrelated section and
+    then checks the pin is still there.
+  */
+  latitude: number | null;
+  longitude: number | null;
+
   aboutMe: string | null;
 }
 
