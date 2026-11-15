@@ -548,28 +548,39 @@
                   />
                 }
 
-                <!--
-                  SR-1 / P1. The optional extra detail under the town. Shown
-                  only when the chosen town has any — which is NO TOWN TODAY,
-                  because the master call this needs does not exist yet. See
-                  loadTehsilsForCity for the two things that must land.
+<!--
+  🔴 THE "Tehsil / Sub-tehsil" CONTROL WAS REMOVED HERE ON 15 Nov 2026,
+  BECAUSE IT ATE WHAT THE TEACHER CHOSE.
 
-                  ⚠️ ONE CONTROL FOR BOTH, as the label says. There is no
-                  separate sub-tehsil master and there will not be one: a
-                  person knows the name of their place, not its revenue
-                  classification. Anything finer than this is a village, and a
-                  village is typed, not chosen.
-                -->
-                @if (placeHasTehsils(place)) {
-                  <ui-combobox
-                    label="Tehsil / Sub-tehsil"
-                    placeholderOption="Choose…"
-                    helper="Extra detail under your town. Skip it if you are not sure — nothing depends on it."
-                    [options]="place.tehsilOptions()"
-                    [ngModel]="place.tehsilId()"
-                    (ngModelChange)="onPlaceTehsilChange(place, $event)"
-                  />
-                }
+  It rendered whenever the chosen town had tehsils, accepted a choice, let the
+  section report "Saved" — and the choice went nowhere. Measured:
+
+      t_app_teacher_preferred_locations   HAS TehsilId (column 12, added by
+                                          036_alter_address_columns.sql)
+      TVP PreferredLocationList           CityId, StateId, PreferenceOrder
+                                          — and NOTHING ELSE
+
+  So the column exists and nothing on earth can write to it. The value was
+  dropped at the table-type boundary, silently, after a success toast.
+
+  ⚠️ THE FILE'S OWN COMMENT PREDICTED THIS. loadTehsilsForCity still says the
+  control "must land in the SAME change as the tehsil-by-city master, or the
+  control starts eating a choice." The master landed in the 11 Nov geography
+  seed — 143 Haryana tehsils — and the control started appearing. Only the
+  Haryana half of that sentence came true.
+
+  🔴 WHY REMOVED RATHER THAN WIRED: carrying TehsilId through means altering a
+  live TABLE TYPE, which means dropping and recreating every procedure that
+  depends on it. That is a real migration and it belongs with the one that is
+  already coming — D1 adds the teacher's own location anchor and touches this
+  same cascade. One migration, not two, and in the meantime a control that
+  discards a choice does not ship.
+
+  ⚠️ THE SCHOOL AND CAMPUS TEHSIL PICKERS STAY. They are stored:
+  t_mdm_school_registration_details.TehsilId and the branch equivalent are both
+  written by their procedures. This removal is teacher-side only.
+-->
+
               </div>
 
               <div class="places__actions">
@@ -842,6 +853,28 @@
                       @if (type.isMandatory) { <span class="documents__required">needed</span> }
                     </span>
 
+                    <!--
+                      🔴 THE MASKED-AADHAAR LINE — client instruction, 15 Nov
+                      2026, confirmed in writing.
+
+                      🔒 KEYED ON `code`, NOT ON `name`. The Code is contract
+                      ("never change a live Code"); the Name is the column the
+                      client is explicitly invited to reword (CLIENT_ASKS 1.4).
+                      Matching on the label would make this line vanish the
+                      first time they rename the row.
+
+                      🔒 NO NUMBER IS EVER STORED, READ OR PARSED (2.50). This
+                      asks for LESS of the document, not more — we need the
+                      name and the photo, and nothing downstream has a column
+                      that could hold an Aadhaar number even if it arrived.
+                    -->
+                    @if (type.code === 'ID_PROOF') {
+                      <span class="field__helper">
+                        A masked Aadhaar is fine — the kind with the first 8
+                        digits hidden. We only need your name and photo.
+                      </span>
+                    }
+
                     @if (hasDocument(type.id); as uploaded) {
                       <span class="documents__file">
                         {{ uploaded.fileName }}
@@ -874,6 +907,65 @@
                 </li>
               }
             </ul>
+
+            <!--==============================================================
+              D6 — ASKING TO BE VERIFIED
+
+              🔴 THIS BUTTON DID NOT EXIST, AND NOR DID ANYTHING LIKE IT.
+              Measured 15 Nov 2026: nothing in the product created a
+              TEACHER_VERIFY approval request — calls to `approvals/submit`
+              across all three authenticated apps came to ZERO — so every
+              type-2 row in the admin queue was a seed row. Documents arrived
+              here, a "needed" chip was drawn, and the whole approval path
+              behind it was reachable only by hand.
+
+              ⚠️ VERIFICATION IS NOT A GATE (2.9). Nothing below blocks
+              applying, being found, or anything else. The badge is the only
+              thing at stake, which is why a missing document can honestly
+              refuse here.
+
+              🔴 EVERY BRANCH SAYS SOMETHING TRUE (2.62). Already sent, already
+              verified, not ready and naming the document, or cannot check
+              right now — never a button that might not work.
+            ===============================================================-->
+            @if (verification(); as check) {
+              <div class="documents__verify">
+                @if (check.isVerified) {
+                  <p class="text-helper">
+                    Your profile is verified. Schools see the badge when they
+                    find you.
+                  </p>
+                } @else if (check.canRequest) {
+                  <p class="text-helper">
+                    Everything we need is here. Send it over and we will check
+                    it — you can keep using your account while we do.
+                  </p>
+
+                  <ui-button
+                    variant="primary"
+                    [disabled]="requestingVerification()"
+                    (click)="requestVerification()"
+                  >
+                    {{ requestingVerification() ? 'Sending…' : 'Send for verification' }}
+                  </ui-button>
+                } @else if (check.missingDocument) {
+                  <!--
+                    🔴 NAMES THE DOCUMENT, and the name comes from the master
+                    the client controls — the same row the upload slot above
+                    labelled itself with, so the two can never disagree.
+                  -->
+                  <p class="text-helper">
+                    Upload your <strong>{{ check.missingDocument }}</strong> and
+                    you can send your profile for verification.
+                  </p>
+                }
+              </div>
+            } @else if (verificationFailed()) {
+              <p class="text-helper">
+                We could not check your verification status just now. Your
+                documents are safe — refresh the page to try again.
+              </p>
+            }
           </div>
         }
       </div>

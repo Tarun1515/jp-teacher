@@ -51,6 +51,44 @@ export interface TeacherExperience {
   isCurrent: boolean;
 }
 
+/*
+  ⚠️ WHETHER THIS TEACHER CAN ASK TO BE VERIFIED.
+
+  🔴 Until 15 Nov 2026 there was nothing to ask WITH. Nothing in the product
+  created a TEACHER_VERIFY approval request — the documents landed on the
+  profile, a "needed" chip was drawn beside the mandatory ones, and the whole
+  approval path behind it (queue, document review, the badge) was reachable only
+  by hand.
+
+  🔒 NO AADHAAR OR PAN NUMBER (2.50). `missingDocument` is a document type's
+  NAME from the master. No field here, and no column behind it, holds either
+  number — the document is the record and an admin's eyes verify it.
+
+  ⚠️ `canRequest` COMES FROM THE SERVER rather than being derived here from the
+  other three. The same rule decides whether the button works, so the screen
+  reads the answer instead of re-implementing it and risking a button that is
+  enabled over a refusal.
+*/
+export interface TeacherVerificationReadiness {
+  isVerified: boolean;
+  documentCount: number;
+
+  /** The first mandatory document not uploaded, in the order shown. */
+  missingDocument: string | null;
+
+  canRequest: boolean;
+}
+
+export interface TeacherVerificationResult {
+  requestId: number;
+  requestNo: string;
+
+  /** A request was already awaiting review — not an error (idempotent submit). */
+  alreadyPending: boolean;
+
+  message: string;
+}
+
 export interface TeacherDocument {
   documentId: number;
   documentTypeId: number;
@@ -241,6 +279,30 @@ export class TeacherService {
     return this.http
       .delete<ApiResponse<unknown>>(`${this.baseUrl}/documents/${documentId}`)
       .pipe(map(() => undefined));
+  }
+
+  // ---- verification (D6) --------------------------------------------------
+
+  /** Whether asking to be verified would work, and what is missing if not. */
+  verificationReadiness(): Observable<TeacherVerificationReadiness> {
+    return this.http
+      .get<ApiResponse<TeacherVerificationReadiness>>(`${this.baseUrl}/verification`)
+      .pipe(map((response) => response.data as TeacherVerificationReadiness));
+  }
+
+  /**
+   * Submits the profile for verification.
+   *
+   * 🔴 NO BODY. Which teacher, which documents and which name all come from the
+   * token and the stored profile — there is nothing for a caller to substitute.
+   *
+   * ⚠️ Idempotent on the server: a request already awaiting review comes back
+   * with `alreadyPending = true` rather than becoming a second queue row.
+   */
+  requestVerification(): Observable<TeacherVerificationResult> {
+    return this.http
+      .post<ApiResponse<TeacherVerificationResult>>(`${this.baseUrl}/verification`, {})
+      .pipe(map((response) => response.data as TeacherVerificationResult));
   }
 
   // ---- the five full-set endpoints ----------------------------------------

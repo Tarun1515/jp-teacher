@@ -38,6 +38,7 @@ import {
   TeacherLocation,
   TeacherProfile,
   TeacherService,
+  TeacherVerificationReadiness,
   UpdateTeacherProfileBody,
 } from '../../../core/teacher.service';
 
@@ -98,20 +99,18 @@ interface PreferredPlace {
 
   readonly cityId: WritableSignal<number | null>;
 
-  /**
-   * 🔴 COLLECTED BUT NOT YET SENT — see `loadTehsilsForCity` and
-   * `preferredLocationsToSave`. Today the control never appears, because the
-   * list it needs always comes back empty.
-   */
-  readonly tehsilId: WritableSignal<number | null>;
-
+  /*
+    🔴 `tehsilId`, `tehsils` AND `tehsilOptions` WERE REMOVED FROM THIS ROW ON
+    15 Nov 2026. The control they fed discarded what the teacher chose — the
+    `dbo.PreferredLocationList` table type carries CityId, StateId and
+    PreferenceOrder and nothing else. They come back with the migration that
+    gives them somewhere to land (D1). See the note on `onPlaceCityChange`.
+  */
   readonly districts: WritableSignal<Lookup[]>;
   readonly cities: WritableSignal<Lookup[]>;
-  readonly tehsils: WritableSignal<Lookup[]>;
 
   readonly districtOptions: Signal<UiSelectOption[]>;
   readonly cityOptions: Signal<UiSelectOption[]>;
-  readonly tehsilOptions: Signal<UiSelectOption[]>;
 }
 
 /** Monotonic, module-scoped, so a removed row's key is never re-issued. */
@@ -399,6 +398,84 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       error: () => {
         this.loadFailed.set(true);
         this.loading.set(false);
+      },
+    });
+
+    this.loadVerification();
+  }
+
+  /*==========================================================================
+    D6 — ASKING TO BE VERIFIED
+
+    🔴 THERE WAS NO WAY TO ASK. Measured 15 Nov 2026: nothing in the product
+    created a TEACHER_VERIFY approval request, so every type-2 row in the admin
+    queue was a seed row. A teacher uploaded documents here, saw a "needed"
+    chip beside the mandatory ones, and that was the end of it — the queue, the
+    document review and USP_SetTeacherVerified were all built and reachable
+    only by hand.
+
+    ⚠️ READ SEPARATELY FROM THE PROFILE, AND A FAILURE IS CONTAINED. The
+    readiness call failing must not fail the whole screen: the section falls
+    back to saying it cannot check right now, which is true, rather than
+    showing a button whose outcome is unknown (2.62).
+  ==========================================================================*/
+  protected readonly verification = signal<TeacherVerificationReadiness | null>(null);
+  protected readonly verificationFailed = signal(false);
+  protected readonly requestingVerification = signal(false);
+
+  private loadVerification(): void {
+    this.verificationFailed.set(false);
+
+    this.teachers.verificationReadiness().subscribe({
+      next: (readiness) => this.verification.set(readiness),
+      error: () => {
+        this.verification.set(null);
+        this.verificationFailed.set(true);
+      },
+    });
+  }
+
+  /**
+   * Sends the profile for verification.
+   *
+   * ⚠️ THE BUTTON IS ONLY OFFERED WHEN `canRequest` IS TRUE, but the refusal is
+   * still handled here. The server is the rule; this screen reading a stale
+   * readiness is exactly the case where a disabled-button-only design turns a
+   * clear message into a dead click.
+   */
+  protected requestVerification(): void {
+    if (this.requestingVerification()) return;
+
+    this.requestingVerification.set(true);
+
+    this.teachers.requestVerification().subscribe({
+      next: (result) => {
+        this.requestingVerification.set(false);
+
+        this.toast.success(
+          result.alreadyPending
+            ? 'Your profile is already with us for checking.'
+            : `Sent for checking. Your reference is ${result.requestNo}.`,
+        );
+
+        this.loadVerification();
+      },
+      error: (error: unknown) => {
+        this.requestingVerification.set(false);
+
+        /*
+          🔴 THE SERVER'S OWN SENTENCE, NOT A GENERIC ONE. A DOCUMENT_REQUIRED
+          refusal names the document — "We still need your Aadhaar card" — and
+          that is more useful than anything this component could compose,
+          because the list it came from is the master the client controls.
+        */
+        const message = (error as { error?: { message?: string } })?.error?.message;
+
+        this.toast.error(message ?? 'We could not send that just now. Try again in a moment.');
+
+        // Whatever the reason, re-read: the most likely one is that a document
+        // was removed in another tab, and the section should now say so.
+        this.loadVerification();
       },
     });
   }
@@ -737,51 +814,39 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     });
   }
 
-  /**
-   * The tehsils of ONE TOWN — the optional last level of the new order.
-   *
-   * ----------------------------------------------------------------------------
-   * ✅ THE KEY IS REPOINTED — ⚠️ BUT THE SAVE STILL IS NOT
-   * ----------------------------------------------------------------------------
-   * `m_mdm_city.TehsilId` is the authoritative link and it is guarded in the
-   * schema: 039_m_mdm_tehsil.sql asserts that a city's tehsil, when set,
-   * belongs to that city's district. It is not expressible through the
-   * `Lookup` shape (id/code/name/displayOrder/parentId), so P1 gave it its own
-   * master key rather than overloading the district-parented `TEHSIL` branch —
-   * a district id and a city id are both plain ints, and a branch that had to
-   * guess which it was handed would answer a real list for a real id.
-   *
-   * `MASTER_KEYS.tehsilByCity` ('tehsil-by-city') is that key, and the call
-   * below now uses it. A city with no tehsil returns `[]`, which hides the
-   * control exactly as a state with no tehsils always has.
-   *
-   * 🔴 WHAT IS STILL MISSING, AND WHY NO CONTROL IS RENDERED YET:
-   *
-   *   THE SAVE. `TeacherLocation` has no `tehsilId`, and neither does the
-   *      `dbo.PreferredLocationList` table type nor
-   *      USP_SaveTeacherPreferredLocations — although
-   *      `t_app_teacher_preferred_locations.TehsilId` EXISTS and 036's own
-   *      comment says "SR-3 lands the picker; this is the column it writes
-   *      to". Until that hop lands, landing (1) alone would make this control
-   *      appear and then silently drop what was chosen. See
-   *      `preferredLocationsToSave`.
-   */
-  private loadTehsilsForCity(
-    cityId: number,
-    into: WritableSignal<Lookup[]>,
-    onSettled?: () => void,
-  ): void {
-    this.masters.getByParent(MASTER_KEYS.tehsilByCity, cityId).subscribe({
-      next: (items) => {
-        into.set(items);
-        onSettled?.();
-      },
-      error: () => {
-        into.set([]);
-        onSettled?.();
-      },
-    });
-  }
+  /*============================================================================
+    🔴 `loadTehsilsForCity` WAS REMOVED HERE ON 15 Nov 2026, AND ITS OWN
+    COMMENT HAD ALREADY PREDICTED WHY.
+
+    It read, verbatim:
+
+        "Until that hop lands, landing (1) alone would make this control appear
+         and then silently drop what was chosen."
+
+    Both halves then happened. The 11 November geography seed landed
+    `MASTER_KEYS.tehsilByCity` with 143 Haryana tehsils, so the list stopped
+    coming back empty and the control started appearing. The save hop never
+    landed. Measured 15 Nov 2026:
+
+        t_app_teacher_preferred_locations   HAS TehsilId (column 12)
+        TVP dbo.PreferredLocationList       CityId, StateId, PreferenceOrder
+
+    A teacher in Haryana could pick "Gohana" under their town, see the section
+    report Saved, and the value was discarded at the table-type boundary.
+
+    ⚠️ THE PREDICTION WAS NOT ENOUGH, AND THAT IS THE LESSON. A comment warning
+    that two changes must land together does not make them land together. The
+    guard had to be in the code — the control had to be impossible to render
+    without a column to write to — and a sentence in a docblock is not that.
+
+    🔴 WHERE THE WORK WENT: carrying TehsilId through means ALTER on a live
+    TABLE TYPE, which means dropping and recreating every procedure that
+    depends on it. That is a real migration, and it rides with D1's teacher
+    location anchor, which already reshapes this cascade. One migration rather
+    than two — and until then nothing on screen pretends to store a tehsil.
+
+    ⚠️ The school and campus pickers are untouched. Those ARE stored.
+  ============================================================================*/
 
   /**
    * Which district a saved town belongs to.
@@ -1091,10 +1156,8 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     place.stateId.set(stateId);
     place.districtId.set(null);
     place.cityId.set(null);
-    place.tehsilId.set(null);
     place.districts.set([]);
     place.cities.set([]);
-    place.tehsils.set([]);
 
     if (stateId !== null) {
       this.loadDistricts(stateId, place.districts);
@@ -1103,13 +1166,11 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     this.markDirty('locations');
   }
 
-  /** CASCADE RULE: a new district clears town and tehsil, and reloads towns. */
+  /** CASCADE RULE: a new district clears the town and reloads the town list. */
   protected onPlaceDistrictChange(place: PreferredPlace, districtId: number | null): void {
     place.districtId.set(districtId);
     place.cityId.set(null);
-    place.tehsilId.set(null);
     place.cities.set([]);
-    place.tehsils.set([]);
 
     if (districtId !== null) {
       this.loadCitiesForDistrict(districtId, place.cities);
@@ -1119,33 +1180,19 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   }
 
   /**
-   * CASCADE RULE: the town is the tehsil's parent now.
+   * CASCADE RULE: the town is the last level of this cascade.
    *
-   * 🔴 CLEARING THE TOWN CLEARS THE TEHSIL TOO, and that is not tidiness. A
-   * tehsil is a child of the town in this order; kept behind a cleared town it
-   * would be a value with no parent, saved against "anywhere in this state" —
-   * a narrower claim than the teacher just made.
+   * 🔴 THE TEHSIL STEP THAT USED TO HANG OFF HERE IS GONE — 15 Nov 2026. It
+   * rendered, accepted a choice, reported "Saved" and dropped the value at the
+   * `dbo.PreferredLocationList` boundary, which carries CityId, StateId and
+   * PreferenceOrder and nothing else. See the long note in the template.
    *
-   * ⚠️ AND A NEW TOWN DOES NOT KEEP THE OLD TEHSIL EITHER. The tehsil list is
-   * refetched for the new town, and a tehsil from the previous one is not in
-   * it. There is no name-matching and no carrying-over here: `m_mdm_city`'s
-   * own `TehsilId` is the authoritative link, and guessing at it by name would
-   * be a coincidence standing in for a foreign key.
+   * ⚠️ `loadTehsilsForCity` WENT WITH IT. It fetched a list per town change for
+   * a control that no longer exists — a wasted round trip on every selection,
+   * invisible to anyone reading the screen.
    */
   protected onPlaceCityChange(place: PreferredPlace, cityId: number | null): void {
     place.cityId.set(cityId);
-    place.tehsilId.set(null);
-    place.tehsils.set([]);
-
-    if (cityId !== null) {
-      this.loadTehsilsForCity(cityId, place.tehsils);
-    }
-
-    this.markDirty('locations');
-  }
-
-  protected onPlaceTehsilChange(place: PreferredPlace, tehsilId: number | null): void {
-    place.tehsilId.set(tehsilId);
     this.markDirty('locations');
   }
 
@@ -1156,10 +1203,6 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
 
   protected placeHasCities(place: PreferredPlace): boolean {
     return place.cities().length > 0;
-  }
-
-  protected placeHasTehsils(place: PreferredPlace): boolean {
-    return place.tehsils().length > 0;
   }
 
   /**
@@ -1340,18 +1383,15 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
 
         place.districtId.set(districtId);
 
+        /*
+          ⚠️ THE CALLBACK ENDS AT THE TOWN NOW. It used to fetch the town's
+          tehsils here too — one request per saved location, on every re-open,
+          feeding a control that discarded its own value. Both are gone (15 Nov
+          2026); the saved tehsil will be applied in this callback on the day
+          `TeacherLocation` actually carries one.
+        */
         this.loadCitiesForDistrict(districtId, place.cities, () => {
           place.cityId.set(cityId);
-
-          /*
-            ⚠️ Loaded for a re-opened row as well as a freshly picked one, so a
-            row does not change shape after a reload. It costs one request per
-            saved town — cached per parent by `MasterService` — and today every
-            one of them comes back empty, which is why no tehsil control
-            appears on this screen yet. The saved tehsil would be applied in
-            this callback, the day `TeacherLocation` carries one.
-          */
-          this.loadTehsilsForCity(cityId, place.tehsils);
         });
       });
     });
@@ -1710,24 +1750,20 @@ const SECTION_LABELS: Record<ProfileSection, string> = {
 function newPlace(stateId: number | null = null): PreferredPlace {
   const districts = signal<Lookup[]>([]);
   const cities = signal<Lookup[]>([]);
-  const tehsils = signal<Lookup[]>([]);
 
   return {
     key: ++nextPlaceKey,
     stateId: signal(stateId),
     districtId: signal<number | null>(null),
     cityId: signal<number | null>(null),
-    tehsilId: signal<number | null>(null),
     districts,
     cities,
-    tehsils,
 
     // The per-row `computed`s the interface's comment is about. They close over
     // this row's own signals, so one row's options never change identity
     // because another row did.
     districtOptions: computed(() => lookupsToOptions(districts())),
     cityOptions: computed(() => lookupsToOptions(cities())),
-    tehsilOptions: computed(() => lookupsToOptions(tehsils())),
   };
 }
 
