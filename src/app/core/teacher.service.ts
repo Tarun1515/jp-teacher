@@ -39,6 +39,19 @@ export interface TeacherLocation {
   cityId: number | null;
   stateId: number;
   preferenceOrder: number;
+
+  /*
+    🔴 THE FIELD THAT WAS MISSING WHILE THE COLUMN EXISTED.
+
+    `t_app_teacher_preferred_locations.TehsilId` has been there since 036, and
+    until 15 Nov 2026 `dbo.PreferredLocationList` — the table type the save goes
+    through — had no column for it. The picker on this screen accepted a tehsil,
+    the section reported "Saved", and the value was dropped at that boundary.
+
+    Both halves landed together this time: the type, the save procedure, the
+    read, this interface, and the control.
+  */
+  tehsilId: number | null;
 }
 
 export interface TeacherExperience {
@@ -128,6 +141,20 @@ export interface TeacherProfile {
   expectedSalaryMax: number | null;
   currentCityId: number | null;
   currentStateId: number | null;
+
+  /*
+    The rest of the address chain, to match the school's — client instruction,
+    15 Nov 2026. State and city were already here; district, tehsil and
+    area/village are new (039_alter_teacher_address_columns.sql).
+
+    ⚠️ DISTRICT IS A STORED FIELD NOW, not a display-only step. This screen used
+    to rebuild it from the saved city on every re-open (`districtOfCity`), which
+    held only because a city belongs to one district — and stops holding under a
+    tehsil, which sits between them.
+  */
+  currentDistrictId: number | null;
+  currentTehsilId: number | null;
+  currentAreaOrVillage: string | null;
   aboutMe: string | null;
   resumePath: string | null;
 
@@ -171,6 +198,20 @@ export interface UpdateTeacherProfileBody {
   expectedSalaryMax: number | null;
   currentCityId: number | null;
   currentStateId: number | null;
+
+  /*
+    The rest of the address chain, to match the school's — client instruction,
+    15 Nov 2026. State and city were already here; district, tehsil and
+    area/village are new (039_alter_teacher_address_columns.sql).
+
+    ⚠️ DISTRICT IS A STORED FIELD NOW, not a display-only step. This screen used
+    to rebuild it from the saved city on every re-open (`districtOfCity`), which
+    held only because a city belongs to one district — and stops holding under a
+    tehsil, which sits between them.
+  */
+  currentDistrictId: number | null;
+  currentTehsilId: number | null;
+  currentAreaOrVillage: string | null;
   aboutMe: string | null;
 }
 

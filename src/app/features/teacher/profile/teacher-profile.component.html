@@ -548,39 +548,38 @@
                   />
                 }
 
-<!--
-  🔴 THE "Tehsil / Sub-tehsil" CONTROL WAS REMOVED HERE ON 15 Nov 2026,
-  BECAUSE IT ATE WHAT THE TEACHER CHOSE.
+                <!--
+                  The optional extra detail under the town, shown only when the
+                  chosen town has any.
 
-  It rendered whenever the chosen town had tehsils, accepted a choice, let the
-  section report "Saved" — and the choice went nowhere. Measured:
+                  🔴 THIS CONTROL NOW STORES WHAT IT IS GIVEN — 15 Nov 2026.
+                  Earlier today it was removed, because it did not: the column
+                  was on t_app_teacher_preferred_locations and the table type
+                  carrying the save had no field for it, so a teacher could pick
+                  a tehsil, be told "Saved", and lose it.
 
-      t_app_teacher_preferred_locations   HAS TehsilId (column 12, added by
-                                          036_alter_address_columns.sql)
-      TVP PreferredLocationList           CityId, StateId, PreferenceOrder
-                                          — and NOTHING ELSE
+                  The whole chain landed in one change — table type, save
+                  procedure, read, DTO, model, this control — and the round trip
+                  was measured against the live database before the control came
+                  back. That ordering is the point: a control before its column
+                  is how the original bug was written.
 
-  So the column exists and nothing on earth can write to it. The value was
-  dropped at the table-type boundary, silently, after a success toast.
-
-  ⚠️ THE FILE'S OWN COMMENT PREDICTED THIS. loadTehsilsForCity still says the
-  control "must land in the SAME change as the tehsil-by-city master, or the
-  control starts eating a choice." The master landed in the 11 Nov geography
-  seed — 143 Haryana tehsils — and the control started appearing. Only the
-  Haryana half of that sentence came true.
-
-  🔴 WHY REMOVED RATHER THAN WIRED: carrying TehsilId through means altering a
-  live TABLE TYPE, which means dropping and recreating every procedure that
-  depends on it. That is a real migration and it belongs with the one that is
-  already coming — D1 adds the teacher's own location anchor and touches this
-  same cascade. One migration, not two, and in the meantime a control that
-  discards a choice does not ship.
-
-  ⚠️ THE SCHOOL AND CAMPUS TEHSIL PICKERS STAY. They are stored:
-  t_mdm_school_registration_details.TehsilId and the branch equivalent are both
-  written by their procedures. This removal is teacher-side only.
--->
-
+                  ⚠️ ONE CONTROL FOR BOTH, as the label says. There is no
+                  separate sub-tehsil master and there will not be one: a person
+                  knows the name of their place, not its revenue classification.
+                  Anything finer than this is a village, and a village is typed,
+                  not chosen.
+                -->
+                @if (placeHasTehsils(place)) {
+                  <ui-combobox
+                    label="Tehsil / Sub-tehsil"
+                    placeholderOption="Choose…"
+                    helper="Extra detail under your town. Skip it if you are not sure — nothing depends on it."
+                    [options]="place.tehsilOptions()"
+                    [ngModel]="place.tehsilId()"
+                    (ngModelChange)="onPlaceTehsilChange(place, $event)"
+                  />
+                }
               </div>
 
               <div class="places__actions">
@@ -762,6 +761,62 @@
                 (ngModelChange)="onHomeCityChange($event)"
               />
             }
+
+            <!--
+              🔴 TEHSIL AND AREA — client instruction, 15 Nov 2026: a teacher's
+              address carries the same chain the school registration form does,
+              State -> District -> City/Town -> Tehsil/Sub-tehsil -> Area.
+
+              Until today this section stopped at the town, and the comment here
+              said why: `t_app_teachers` had columns for a state and a city and
+              nothing else. 039_alter_teacher_address_columns.sql added
+              CurrentDistrictId, CurrentTehsilId and CurrentAreaOrVillage, and
+              USP_UpdateTeacherProfile writes all three — round-tripped against
+              the live database before these controls were drawn.
+
+              ⚠️ THAT ORDER MATTERS AND IT IS THE LESSON OF THIS WHOLE PASS. The
+              preferred-location tehsil picker was added before its column could
+              be written, and it spent days accepting choices it threw away. A
+              control is drawn after its storage, never before.
+            -->
+            @if (hasHomeTehsils()) {
+              <ui-combobox
+                label="Tehsil / Sub-tehsil"
+                placeholderOption="Choose…"
+                helper="Extra detail under your town. Skip it if you are not sure."
+                [options]="homeTehsilOptions()"
+                [ngModel]="value('currentTehsilId')"
+                (ngModelChange)="onHomeTehsilChange($event)"
+              />
+            }
+
+            <!--
+              ⚠️ TYPED, NOT CHOSEN, and it is the only level that is. Below a
+              tehsil there is no list worth having — a village in no master is
+              still where somebody lives, and refusing to record it because it
+              is unlisted would be the product telling them their own address is
+              wrong. Same decision as the school registration form's.
+            -->
+            <div class="field">
+              <label class="field__label" for="home-area">Area or village</label>
+
+              <input
+                class="form-control"
+                id="home-area"
+                type="text"
+                maxlength="200"
+                autocomplete="address-level4"
+                placeholder="Barwala, Model Town …"
+                [value]="value('currentAreaOrVillage') ?? ''"
+                (change)="onHomeAreaChange($any($event.target).value)"
+                aria-describedby="home-area-helper"
+              />
+
+              <p class="field__helper" id="home-area-helper">
+                Optional. Your locality, colony or village, if it is not in the
+                lists above.
+              </p>
+            </div>
           </div>
         </div>
       </div>

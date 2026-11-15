@@ -99,18 +99,25 @@ interface PreferredPlace {
 
   readonly cityId: WritableSignal<number | null>;
 
-  /*
-    🔴 `tehsilId`, `tehsils` AND `tehsilOptions` WERE REMOVED FROM THIS ROW ON
-    15 Nov 2026. The control they fed discarded what the teacher chose — the
-    `dbo.PreferredLocationList` table type carries CityId, StateId and
-    PreferenceOrder and nothing else. They come back with the migration that
-    gives them somewhere to land (D1). See the note on `onPlaceCityChange`.
-  */
+  /**
+   * The tehsil of this row's town.
+   *
+   * 🔴 THIS NOW LANDS. Earlier on 15 Nov 2026 it was removed, because the
+   * control accepted a choice the save discarded: the column existed on
+   * `t_app_teacher_preferred_locations` and `dbo.PreferredLocationList` had no
+   * field for it. The table type, the save procedure, the read, the DTO and
+   * this row were all changed in one go, which is what the removal was waiting
+   * for — measured round trip before the control came back.
+   */
+  readonly tehsilId: WritableSignal<number | null>;
+
   readonly districts: WritableSignal<Lookup[]>;
   readonly cities: WritableSignal<Lookup[]>;
+  readonly tehsils: WritableSignal<Lookup[]>;
 
   readonly districtOptions: Signal<UiSelectOption[]>;
   readonly cityOptions: Signal<UiSelectOption[]>;
+  readonly tehsilOptions: Signal<UiSelectOption[]>;
 }
 
 /** Monotonic, module-scoped, so a removed row's key is never re-issued. */
@@ -247,12 +254,25 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     typed, and this file's own DTO comment says it best: "a field the server
     ignores is a field somebody will one day expect it to honour."
 
-    ⚠️ DISTRICT IS NAVIGATIONAL HERE TOO. It is not in the draft and is not
-    sent; it exists so the town list can be reached, and is reconstructed from
-    the saved city on re-open.
+    🔴 DISTRICT IS NO LONGER NAVIGATIONAL — 15 Nov 2026. It used to be absent
+    from the draft and rebuilt from the saved city on every re-open, which held
+    only because a city belongs to exactly one district. It stops holding under
+    a tehsil, which sits BETWEEN them: a derived parent cannot be checked
+    against a stored child. `currentDistrictId` is now a stored field like the
+    rest, and `homeDistrictId` below mirrors it for the cascade.
   */
   protected readonly homeDistricts = signal<Lookup[]>([]);
   protected readonly homeCities = signal<Lookup[]>([]);
+  protected readonly homeTehsils = signal<Lookup[]>([]);
+
+  /**
+   * The district on screen.
+   *
+   * ⚠️ MIRRORS `draft().currentDistrictId` rather than replacing it. The draft
+   * is what gets sent and what `isDirty` is computed from; this signal is what
+   * the cascade reads, and keeping them separate means the cascade can be
+   * rebuilt on re-open without marking the card dirty.
+   */
   protected readonly homeDistrictId = signal<number | null>(null);
 
   /*
@@ -303,6 +323,7 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
 
   protected readonly homeDistrictOptions = computed(() => lookupsToOptions(this.homeDistricts()));
   protected readonly homeCityOptions = computed(() => lookupsToOptions(this.homeCities()));
+  protected readonly homeTehsilOptions = computed(() => lookupsToOptions(this.homeTehsils()));
 
   /*
     🔴 HIDDEN, NOT DISABLED-AND-EMPTY — the same contract the registration form
@@ -322,6 +343,15 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   */
   protected readonly hasHomeDistricts = computed(() => this.homeDistricts().length > 0);
   protected readonly hasHomeCities = computed(() => this.homeCities().length > 0);
+
+  /**
+   * ⚠️ A state with no tehsils in the master hides the control rather than
+   * showing an empty dropdown — the same rule the district and town boxes
+   * already follow. Today that means Haryana shows it and the rest do not,
+   * which is a data fact rather than a code branch, and it changes the day the
+   * client tells us which states to do next (CLIENT_ASKS 1.3).
+   */
+  protected readonly hasHomeTehsils = computed(() => this.homeTehsils().length > 0);
 
   // ---- the bridge selections ----------------------------------------------
   protected readonly selectedSubjects = signal<number[]>([]);
@@ -497,6 +527,9 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       expectedSalaryMax: profile.expectedSalaryMax,
       currentCityId: profile.currentCityId,
       currentStateId: profile.currentStateId,
+      currentDistrictId: profile.currentDistrictId,
+      currentTehsilId: profile.currentTehsilId,
+      currentAreaOrVillage: profile.currentAreaOrVillage,
       aboutMe: profile.aboutMe,
     });
 
@@ -814,39 +847,63 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     });
   }
 
-  /*============================================================================
-    🔴 `loadTehsilsForCity` WAS REMOVED HERE ON 15 Nov 2026, AND ITS OWN
-    COMMENT HAD ALREADY PREDICTED WHY.
-
-    It read, verbatim:
-
-        "Until that hop lands, landing (1) alone would make this control appear
-         and then silently drop what was chosen."
-
-    Both halves then happened. The 11 November geography seed landed
-    `MASTER_KEYS.tehsilByCity` with 143 Haryana tehsils, so the list stopped
-    coming back empty and the control started appearing. The save hop never
-    landed. Measured 15 Nov 2026:
-
-        t_app_teacher_preferred_locations   HAS TehsilId (column 12)
-        TVP dbo.PreferredLocationList       CityId, StateId, PreferenceOrder
-
-    A teacher in Haryana could pick "Gohana" under their town, see the section
-    report Saved, and the value was discarded at the table-type boundary.
-
-    ⚠️ THE PREDICTION WAS NOT ENOUGH, AND THAT IS THE LESSON. A comment warning
-    that two changes must land together does not make them land together. The
-    guard had to be in the code — the control had to be impossible to render
-    without a column to write to — and a sentence in a docblock is not that.
-
-    🔴 WHERE THE WORK WENT: carrying TehsilId through means ALTER on a live
-    TABLE TYPE, which means dropping and recreating every procedure that
-    depends on it. That is a real migration, and it rides with D1's teacher
-    location anchor, which already reshapes this cascade. One migration rather
-    than two — and until then nothing on screen pretends to store a tehsil.
-
-    ⚠️ The school and campus pickers are untouched. Those ARE stored.
-  ============================================================================*/
+  /**
+   * The tehsils of ONE TOWN — the optional last level of the cascade.
+   *
+   * ----------------------------------------------------------------------------
+   * 🔴 THE SAVE HOP LANDED ON 15 Nov 2026, AND THIS FILE'S OWN COMMENT IS WHY
+   * IT HAD TO
+   * ----------------------------------------------------------------------------
+   * The version of this method that shipped before today carried a warning,
+   * verbatim:
+   *
+   *     "Until that hop lands, landing (1) alone would make this control appear
+   *      and then silently drop what was chosen."
+   *
+   * Both halves of that prediction then happened. The 11 November geography seed
+   * landed `MASTER_KEYS.tehsilByCity` with 143 Haryana tehsils, so the list
+   * stopped coming back empty and the control started appearing. The save hop
+   * did not land. Measured:
+   *
+   *     t_app_teacher_preferred_locations   HAS TehsilId (column 12, from 036)
+   *     TVP dbo.PreferredLocationList       CityId, StateId, PreferenceOrder
+   *
+   * A teacher in Haryana could pick a tehsil under their town, see the section
+   * report "Saved", and the value was discarded at the table-type boundary.
+   *
+   * ⚠️ THE PREDICTION WAS NOT ENOUGH, AND THAT IS THE LESSON WORTH KEEPING. A
+   * comment warning that two changes must land together does not make them land
+   * together. What closed it was the migration, not the warning.
+   *
+   * ✅ WHAT LANDED, IN ONE CHANGE: `040_alter_preferred_location_tvp.sql` rebuilt
+   * the table type with TehsilId; `USP_SaveTeacherPreferredLocations` writes it
+   * and treats a tehsil change as a change (with NULL-equality, so setting one
+   * for the first time is detected); `USP_GetTeacherProfile` returns it;
+   * `TeacherLocationDto` and `TeacherLocation` carry it; the repository's
+   * DataTable has a fourth column. Round-tripped against the live database
+   * before this control came back.
+   *
+   * ⚠️ ONE CONTROL FOR TEHSIL AND SUB-TEHSIL, as the label says. There is no
+   * separate sub-tehsil master and there will not be one: a person knows the
+   * name of their place, not its revenue classification. Anything finer is a
+   * village, and a village is typed, not chosen.
+   */
+  private loadTehsilsForCity(
+    cityId: number,
+    into: WritableSignal<Lookup[]>,
+    onSettled?: () => void,
+  ): void {
+    this.masters.getByParent(MASTER_KEYS.tehsilByCity, cityId).subscribe({
+      next: (items) => {
+        into.set(items);
+        onSettled?.();
+      },
+      error: () => {
+        into.set([]);
+        onSettled?.();
+      },
+    });
+  }
 
   /**
    * Which district a saved town belongs to.
@@ -907,20 +964,32 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   protected onHomeStateChange(stateId: number | null): void {
     this.set('currentStateId', stateId, 'salary');
     this.set('currentCityId', null, 'salary');
+    this.set('currentDistrictId', null, 'salary');
+    this.set('currentTehsilId', null, 'salary');
     this.homeDistrictId.set(null);
     this.homeDistricts.set([]);
     this.homeCities.set([]);
+    this.homeTehsils.set([]);
 
     if (stateId !== null) {
       this.loadDistricts(stateId, this.homeDistricts);
     }
   }
 
-  /** CASCADE RULE: a new district clears the town and reloads the town list. */
+  /**
+   * CASCADE RULE: a new district clears town and tehsil, and reloads towns.
+   *
+   * 🔴 THE DISTRICT IS SENT NOW, not just used to reach the town list. Both the
+   * mirror signal and the draft are written, because the cascade reads one and
+   * the save reads the other.
+   */
   protected onHomeDistrictChange(districtId: number | null): void {
     this.homeDistrictId.set(districtId);
+    this.set('currentDistrictId', districtId, 'salary');
     this.set('currentCityId', null, 'salary');
+    this.set('currentTehsilId', null, 'salary');
     this.homeCities.set([]);
+    this.homeTehsils.set([]);
 
     if (districtId !== null) {
       this.loadCitiesForDistrict(districtId, this.homeCities);
@@ -928,14 +997,42 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   }
 
   /**
-   * CASCADE RULE: the town is the last level here.
+   * CASCADE RULE: the town is the tehsil's parent.
    *
-   * ⚠️ Nothing hangs off it: there is no tehsil or village control in this
-   * section, because `t_app_teachers` has no column for either. See the
-   * geography comment above the signals.
+   * 🔴 A TEHSIL CONTROL HANGS OFF THIS NOW — client instruction, 15 Nov 2026:
+   * the teacher's address carries the same chain the school's does. The comment
+   * that used to be here said `t_app_teachers` has no column for a tehsil or a
+   * village, which was true until 039_alter_teacher_address_columns.sql.
+   *
+   * ⚠️ CLEARING THE TOWN CLEARS THE TEHSIL, for the reason it does on a
+   * preferred-location row: a tehsil behind a cleared town is a value with no
+   * parent.
    */
   protected onHomeCityChange(cityId: number | null): void {
     this.set('currentCityId', cityId, 'salary');
+    this.set('currentTehsilId', null, 'salary');
+    this.homeTehsils.set([]);
+
+    if (cityId !== null) {
+      this.loadTehsilsForCity(cityId, this.homeTehsils);
+    }
+  }
+
+  /** CASCADE RULE: the tehsil is the last CHOSEN level — the village is typed. */
+  protected onHomeTehsilChange(tehsilId: number | null): void {
+    this.set('currentTehsilId', tehsilId, 'salary');
+  }
+
+  /**
+   * The village or area, typed.
+   *
+   * ⚠️ FREE TEXT ON PURPOSE, and the last level for the same reason the school
+   * form has it: below a tehsil there is no list worth having. A village in no
+   * master is still where somebody lives, and refusing to record it because it
+   * is unlisted would be the product telling them their own address is wrong.
+   */
+  protected onHomeAreaChange(value: string): void {
+    this.set('currentAreaOrVillage', value.trim() === '' ? null : value, 'salary');
   }
 
   // =========================================================================
@@ -1061,10 +1158,43 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       this.set('currentCityId', cityId, 'salary');
     }
 
-    // The UI-only levels are rebuilt from the state down.
+    /*
+      🔴 THE RESOLVE FILLS THE REST OF THE CHAIN TOO — 15 Nov 2026.
+
+      `ResolvedAddress` has carried `tehsilId` and `areaOrVillage` since SR-1
+      and this screen threw both away, because `t_app_teachers` had nowhere to
+      put them. It has now (039), so a teacher who searches their address gets
+      the same five levels filled in that a school does.
+
+      ⚠️ ONLY WHEN THE RESOLVE ACTUALLY FOUND ONE. A null from Google means
+      "not in the address", not "clear what the teacher typed" — except where
+      the state moved, which invalidates everything under it exactly as
+      `onHomeStateChange` does.
+    */
+    const tehsilId = resolved.tehsilId ?? (stateMoved ? null : draft.currentTehsilId);
+
+    if (draft.currentTehsilId !== tehsilId) {
+      this.set('currentTehsilId', tehsilId, 'salary');
+    }
+
+    if (resolved.areaOrVillage && draft.currentAreaOrVillage !== resolved.areaOrVillage) {
+      this.set('currentAreaOrVillage', resolved.areaOrVillage, 'salary');
+    }
+
+    // The levels the cascade needs are rebuilt from the state down.
     this.homeDistrictId.set(null);
     this.homeDistricts.set([]);
     this.homeCities.set([]);
+    this.homeTehsils.set([]);
+
+    /*
+      ⚠️ The tehsil LIST is keyed on the town, so it is fetched here rather than
+      inside the district callback — the stored id is already set above; this is
+      only what lets the combobox show its name.
+    */
+    if (cityId !== null) {
+      this.loadTehsilsForCity(cityId, this.homeTehsils);
+    }
 
     this.loadDistricts(stateId, this.homeDistricts, () => {
       /*
@@ -1119,6 +1249,7 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       if (resolvedDistrictId === null) return;
 
       this.homeDistrictId.set(resolvedDistrictId);
+      this.set('currentDistrictId', resolvedDistrictId, 'salary');
       this.loadCitiesForDistrict(resolvedDistrictId, this.homeCities);
       return;
     }
@@ -1135,6 +1266,16 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       if (derived === null) return;
 
       this.homeDistrictId.set(derived);
+
+      /*
+        ⚠️ THE DERIVED DISTRICT IS STORED TOO, and this is the one place where a
+        value the teacher did not pick is written to the draft. It is the right
+        trade: the district IS the city's district — read from the master, not
+        guessed — and leaving it null while the city is set would mean a saved
+        address with a hole in the middle of its chain. The alternative, asking
+        the teacher to re-pick a district they already implied, is worse.
+      */
+      this.set('currentDistrictId', derived, 'salary');
       this.loadCitiesForDistrict(derived, this.homeCities);
     });
   }
@@ -1156,8 +1297,10 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     place.stateId.set(stateId);
     place.districtId.set(null);
     place.cityId.set(null);
+    place.tehsilId.set(null);
     place.districts.set([]);
     place.cities.set([]);
+    place.tehsils.set([]);
 
     if (stateId !== null) {
       this.loadDistricts(stateId, place.districts);
@@ -1166,11 +1309,13 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     this.markDirty('locations');
   }
 
-  /** CASCADE RULE: a new district clears the town and reloads the town list. */
+  /** CASCADE RULE: a new district clears town and tehsil, and reloads towns. */
   protected onPlaceDistrictChange(place: PreferredPlace, districtId: number | null): void {
     place.districtId.set(districtId);
     place.cityId.set(null);
+    place.tehsilId.set(null);
     place.cities.set([]);
+    place.tehsils.set([]);
 
     if (districtId !== null) {
       this.loadCitiesForDistrict(districtId, place.cities);
@@ -1180,20 +1325,38 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
   }
 
   /**
-   * CASCADE RULE: the town is the last level of this cascade.
+   * CASCADE RULE: the town is the tehsil's parent in this order.
    *
-   * 🔴 THE TEHSIL STEP THAT USED TO HANG OFF HERE IS GONE — 15 Nov 2026. It
-   * rendered, accepted a choice, reported "Saved" and dropped the value at the
-   * `dbo.PreferredLocationList` boundary, which carries CityId, StateId and
-   * PreferenceOrder and nothing else. See the long note in the template.
+   * 🔴 CLEARING THE TOWN CLEARS THE TEHSIL TOO, and that is not tidiness. A
+   * tehsil is a child of the town here; kept behind a cleared town it would be
+   * a value with no parent, saved against "anywhere in this state" — a narrower
+   * claim than the teacher just made.
    *
-   * ⚠️ `loadTehsilsForCity` WENT WITH IT. It fetched a list per town change for
-   * a control that no longer exists — a wasted round trip on every selection,
-   * invisible to anyone reading the screen.
+   * ⚠️ AND A NEW TOWN DOES NOT KEEP THE OLD TEHSIL EITHER. The list is
+   * refetched for the new town and a tehsil from the previous one is not in it.
+   * No name-matching and no carrying-over: `m_mdm_city.TehsilId` is the
+   * authoritative link, and guessing at it by name would be a coincidence
+   * standing in for a foreign key.
    */
   protected onPlaceCityChange(place: PreferredPlace, cityId: number | null): void {
     place.cityId.set(cityId);
+    place.tehsilId.set(null);
+    place.tehsils.set([]);
+
+    if (cityId !== null) {
+      this.loadTehsilsForCity(cityId, place.tehsils);
+    }
+
     this.markDirty('locations');
+  }
+
+  protected onPlaceTehsilChange(place: PreferredPlace, tehsilId: number | null): void {
+    place.tehsilId.set(tehsilId);
+    this.markDirty('locations');
+  }
+
+  protected placeHasTehsils(place: PreferredPlace): boolean {
+    return place.tehsils().length > 0;
   }
 
   /** Whether a row's state has any town worth narrowing to. */
@@ -1247,7 +1410,25 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
       if (seen.has(identity)) continue;
       seen.add(identity);
 
-      locations.push({ cityId, stateId, preferenceOrder: locations.length + 1 });
+      /*
+        ⚠️ TEHSIL IS SENT, AND IT IS NOT PART OF THE IDENTITY ABOVE.
+
+        The identity is still `state:city` — a town belongs to exactly one
+        tehsil, so two rows differing only by tehsil would be nonsense rather
+        than two preferences. The server matches on the same pair with
+        NULL-equality and updates the tehsil in place, exactly as it does the
+        preference order.
+
+        🔴 A tehsil behind a cleared town is NOT sent: `onPlaceCityChange`
+        clears it, so a stale child cannot ride along with "anywhere in this
+        state".
+      */
+      locations.push({
+        cityId,
+        stateId,
+        preferenceOrder: locations.length + 1,
+        tehsilId: cityId === null ? null : place.tehsilId(),
+      });
     }
 
     return locations;
@@ -1303,6 +1484,7 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     this.homeDistrictId.set(null);
     this.homeDistricts.set([]);
     this.homeCities.set([]);
+    this.homeTehsils.set([]);
 
     const stateId = profile.currentStateId;
     const cityId = profile.currentCityId;
@@ -1312,6 +1494,18 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
     }
 
     if (cityId === null) return;
+
+    /*
+      🔴 THE TEHSIL LIST IS FETCHED FROM THE TOWN, INDEPENDENTLY OF THE
+      DISTRICT LOOKUP BELOW.
+
+      It is keyed on the town, so it does not need the district — and hanging it
+      off `districtOfCity` would mean a teacher whose district cannot be
+      resolved loses the tehsil box while still holding a saved tehsil. The
+      value itself is in the draft already, set by `apply()`; this is only the
+      list that lets the combobox render its label.
+    */
+    this.loadTehsilsForCity(cityId, this.homeTehsils);
 
     /*
       ⚠️ The town's own value is in the draft and was set by `apply()` — this
@@ -1378,20 +1572,40 @@ export class TeacherProfileComponent implements HasUnsavedChanges, OnDestroy {
         */
         if (districtId === null) {
           place.cityId.set(cityId);
+
+          /*
+            ⚠️ THE TEHSIL IS STILL RESTORED HERE. `loadTehsilsForCity` is keyed
+            on the TOWN, not the district, so an unresolvable district does not
+            stop it — and dropping the tehsil on this branch would mean the next
+            Save silently widened a preference the teacher never touched, which
+            is the same data loss this branch exists to prevent for the town.
+          */
+          this.loadTehsilsForCity(cityId, place.tehsils, () => {
+            place.tehsilId.set(location.tehsilId ?? null);
+          });
+
           return;
         }
 
         place.districtId.set(districtId);
 
-        /*
-          ⚠️ THE CALLBACK ENDS AT THE TOWN NOW. It used to fetch the town's
-          tehsils here too — one request per saved location, on every re-open,
-          feeding a control that discarded its own value. Both are gone (15 Nov
-          2026); the saved tehsil will be applied in this callback on the day
-          `TeacherLocation` actually carries one.
-        */
         this.loadCitiesForDistrict(districtId, place.cities, () => {
           place.cityId.set(cityId);
+
+          /*
+            🔴 AND THE SAVED TEHSIL, APPLIED INSIDE ITS OWN LIST'S CALLBACK —
+            the same rule as every level above it. Set beside the call instead,
+            it would be assigned before the options arrived and the combobox
+            would render blank for a value it holds.
+
+            ⚠️ `saved.tehsilId` IS A REAL VALUE NOW. Until 15 Nov 2026 this
+            callback existed and had nothing to put here, because the table type
+            carrying the save had no column for a tehsil — so every row came
+            back without one no matter what the teacher had chosen.
+          */
+          this.loadTehsilsForCity(cityId, place.tehsils, () => {
+            place.tehsilId.set(location.tehsilId ?? null);
+          });
         });
       });
     });
@@ -1750,20 +1964,24 @@ const SECTION_LABELS: Record<ProfileSection, string> = {
 function newPlace(stateId: number | null = null): PreferredPlace {
   const districts = signal<Lookup[]>([]);
   const cities = signal<Lookup[]>([]);
+  const tehsils = signal<Lookup[]>([]);
 
   return {
     key: ++nextPlaceKey,
     stateId: signal(stateId),
     districtId: signal<number | null>(null),
     cityId: signal<number | null>(null),
+    tehsilId: signal<number | null>(null),
     districts,
     cities,
+    tehsils,
 
     // The per-row `computed`s the interface's comment is about. They close over
     // this row's own signals, so one row's options never change identity
     // because another row did.
     districtOptions: computed(() => lookupsToOptions(districts())),
     cityOptions: computed(() => lookupsToOptions(cities())),
+    tehsilOptions: computed(() => lookupsToOptions(tehsils())),
   };
 }
 
