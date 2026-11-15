@@ -62,6 +62,15 @@ export class TeacherDashboardComponent {
    * nothing here that could point at somebody else's applications (2.39).
    */
   protected readonly appStats = signal<TeacherApplicationStats | null>(null);
+
+  /*
+    🔴 "COULD NOT ASK" IS NOT "STILL ASKING", AND null MEANT BOTH.
+    `appStats` was null while loading AND after a failure, and the template's
+    only other branch says "Loading your applications …" — so a failed stats
+    call left that line on screen for as long as the tab stayed open. Every
+    other screen in this app keeps the two apart (2.62); this one place did not.
+  */
+  protected readonly appStatsFailed = signal(false);
   private readonly teachers = inject(TeacherService);
   private readonly router = inject(Router);
 
@@ -133,8 +142,14 @@ export class TeacherDashboardComponent {
 
     // Same shape again: its own call, its own failure, its own tile.
     this.jobs.stats().subscribe({
-      next: (stats) => this.appStats.set(stats),
-      error: () => this.appStats.set(null),
+      next: (stats) => {
+        this.appStats.set(stats);
+        this.appStatsFailed.set(false);
+      },
+      error: () => {
+        this.appStats.set(null);
+        this.appStatsFailed.set(true);
+      },
     });
   }
 

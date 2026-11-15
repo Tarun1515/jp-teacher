@@ -101,7 +101,19 @@ export class ForgotPasswordComponent {
     clearServerError(this.form.get('email'));
   }
 
+  /*
+    🔴 IT NOW ACTUALLY SENDS AGAIN. It used to only flip `sent` back to false,
+    which re-showed the form and left the user to press "Send reset link"
+    themselves — while the button said "Send again" and the helper line above it
+    promised "send it again, the newest link is the one that works". The label
+    over-promised by one click.
+
+    Calling submit() is safe and deliberate: it re-enters the same guarded path
+    (`submitting()` blocks a double fire), the form still holds the address, and
+    a 429 from asking too often is already answered in words there.
+  */
   protected sendAgain(): void {
     this.sent.set(false);
+    this.submit();
   }
 }

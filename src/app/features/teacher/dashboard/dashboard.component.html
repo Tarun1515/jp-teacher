@@ -258,6 +258,17 @@
                 }
               </ul>
             }
+          } @else if (appStatsFailed()) {
+            <!--
+              🔴 The honest failure, not a permanent "Loading …". It says what
+              could not be done and what is still true, and never implies the
+              teacher has no applications.
+            -->
+            <p class="apps__loading">
+              Your applications could not be loaded just now. They are safe —
+              please refresh the page, or open
+              <a routerLink="/applications">my applications</a>.
+            </p>
           } @else {
             <p class="apps__loading">Loading your applications …</p>
           }
